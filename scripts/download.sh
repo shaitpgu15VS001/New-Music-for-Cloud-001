@@ -34,24 +34,26 @@ fail() { log "✖ $*"; exit 1; }
 try_ytdlp() {
   log "שכבה 1: yt-dlp + PO Token provider"
 
-  python3 -m pip install --quiet --upgrade "yt-dlp[default]" >/dev/null 2>&1 \
-    || { log "התקנת yt-dlp נכשלה"; return 1; }
+  # התקנת yt-dlp + plugin ה-PO Token (הפלגין נדרש כדי שyt-dlp יפנה לשרת הטוקנים)
+  python3 -m pip install --quiet --upgrade "yt-dlp" "bgutil-ytdlp-pot-provider" >/dev/null 2>&1 \
+    || { log "התקנת yt-dlp / bgutil plugin נכשלה"; return 1; }
 
-  # bgutil PO Token provider — יוצר טוקן ללא חשבון Google
+  # שרת ה-PO Token — הוראה רשמית: npm ci && npx tsc (אין npm run build)
   local bgutil_dir="$HOME/bgutil-ytdlp-pot-provider"
   if [ ! -d "$bgutil_dir" ]; then
-    git clone --depth 1 \
+    git clone --depth 1 --single-branch --branch 2.0.2 \
       https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git "$bgutil_dir" >/dev/null 2>&1 \
       || { log "git clone של bgutil נכשל"; return 1; }
   fi
-  (cd "$bgutil_dir/server" && npm install --silent >/dev/null 2>&1 && npm run build --silent >/dev/null 2>&1) \
-    || { log "npm install/build של bgutil נכשל"; return 1; }
+  (cd "$bgutil_dir/server" && npm ci --silent >/dev/null 2>&1 && npx tsc >/dev/null 2>&1) \
+    || { log "npm ci / tsc של bgutil נכשל"; return 1; }
 
-  # הפעלת שרת ה-PO Token ברקע
-  (cd "$bgutil_dir/server" && node build.js >"$LOG_FILE.bgutil" 2>&1 &
+  # הפעלת שרת ה-PO Token ברקע — לפי התיעוד הרשמי: npx tsc ואז node build/main.js
+  (cd "$bgutil_dir/server" && node build/main.js >"$LOG_FILE.bgutil" 2>&1 &
    echo $! > /tmp/bgutil.pid)
   sleep 8
-  if ! curl -s --max-time 5 http://127.0.0.1:4416/ping | grep -q ok; then
+  # /ping מחזיר JSON עם server_uptime ו-version
+  if ! curl -s --max-time 5 http://127.0.0.1:4416/ping | grep -q "server_uptime"; then
     log "שרת PO Token לא עלה על פורט 4416"
     cat "$LOG_FILE.bgutil" 2>/dev/null | tail -5
     return 1

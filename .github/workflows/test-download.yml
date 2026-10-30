@@ -76,6 +76,13 @@ jobs:
             echo "✅ **הצליח**" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "❌ **נכשל** — ראה לוגים" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "<details><summary>30 שורות אחרונות מהלוג</summary>" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -30 downloads/download.log 2>/dev/null >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "</details>" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: העלאת קובץ כ-Artifact
