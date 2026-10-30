@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>הורדה מיוטיוב — מדריך מקוצר</title>
+<style>
+  body { font-family: "Segoe UI", Tahoma, sans-serif; font-size: 16px; line-height: 1.7;
+         background: #f8f9fa; color: #212529; max-width: 80ch; margin: 2rem auto; padding: 0 1rem; }
+  h1 { color: #0d6efd; border-bottom: 2px solid #0d6efd; padding-bottom: .5rem; }
+  h2 { color: #198754; margin-top: 2rem; }
+  code { background: #e9ecef; padding: .1rem .3rem; border-radius: 3px; direction: ltr; unicode-bidi: embed; }
+  pre { background: #212529; color: #f8f9fa; padding: 1rem; border-radius: 6px; overflow-x: auto; direction: ltr; text-align: left; }
+  pre code { background: none; color: inherit; }
+  .tip { background: #d1e7dd; border-right: 4px solid #198754; padding: .7rem 1rem; margin: 1rem 0; }
+  .warn { background: #fff3cd; border-right: 4px solid #fd7e14; padding: .7rem 1rem; margin: 1rem 0; }
+</style>
+</head>
+<body>
+
+<h1>הורדה מיוטיוב — מדריך מקוצר</h1>
+
+<h2>מה זה</h2>
+<p>סקריפט הורדה מיוטיוב ויוטיוב מיוזיק שפועל בשתי שכבות גיבוי, ללא צורך בחשבון גוגל:</p>
+<ul>
+  <li><b>שכבה 1</b> — yt-dlp עם PO Token provider (bgutil): מייצר את טוקן האימות שהיום YouTube דורשת, בלי חשבון</li>
+  <li><b>שכבה 2</b> — cobalt API ציבורי: אם שכבה 1 נחסמת, עוברים ל-instance קהילתי ללא טוקן</li>
+</ul>
+
+<h2>הרצה מקומית</h2>
+<pre>./scripts/download.sh "https://www.youtube.com/shorts/GTgarjAw8b8" video 1080</pre>
+<pre>./scripts/download.sh "https://music.youtube.com/watch?v=XXXX" audio 320</pre>
+<p>הפרמטרים: קישור, מצב (<code>video</code> או <code>audio</code>), איכות (מספר או <code>max</code>).
+הקובץ נשמר בתיקיית <code>downloads/</code>.</p>
+
+<h2>הרצה מ-GitHub Actions</h2>
+<ol>
+  <li>דחפו את הפרויקט ל-repo ב-Gitאב</li>
+  <li>בכרטיסיית <b>Actions</b> בחרו <b>בדיקת הורדה מיוטיוב</b></li>
+  <li>לחצו <b>Run workflow</b> — ניתן להשאיר את ברירות המחדל (3 בדיקות במקביל)</li>
+  <li>בתום הריצה, הורידו את ה-<b>Artifact</b> כדי לראות את האיכות בפועל</li>
+</ol>
+
+<div class="tip">
+<b>טיפ:</b> בדף התוצאות (Summary) של ה-Actions תראו טבלה עם שם הבדיקה, גודל הקובץ, ואיזו שכבה הצליחה.
+</div>
+
+<h2>פתרון תקלות</h2>
+<ul>
+  <li><b>"Sign in to confirm you're not a bot"</b> — שכבה 1 נחסמה. בדקו ב-LOG האם שרת ה-PO Token עלה (פורט 4416). אם לא — שכבה 2 אמורה להשתלט אוטומטית</li>
+  <li><b>cobalt החזיר שגיאת auth</b> — ה-instance הוסיף הגנה. בדקו <code>docs/STATUS.html</code> לinstancות עדכניות</li>
+  <li><b>הקובץ ירד אבל ריק/קטן</b> — לרוב האיכות שביקשת אינה זמינה. נסו איכות נמוכה יותר או מצב audio</li>
+</ul>
+
+<div class="warn">
+<b>מגבלה ידועה:</b> instancות cobalt הקהילתיות עלולות ליפול ללא התראה. זה בדיוק תפקיד השכבה הראשונה (yt-dlp),
+שהיא עצמאית לחלוטין. המעקב אחרי מצב המערכת נמצא ב-<code>docs/STATUS.html</code>.
+</div>
+
+</body>
+</html>

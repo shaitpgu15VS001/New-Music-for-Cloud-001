@@ -1,0 +1,88 @@
+name: בדיקת הורדה מיוטיוב
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "קישור יוטיוב (ריק = שימוש בבדיקות המטריצה)"
+        required: false
+        default: ""
+      mode:
+        description: "מצב הורדה: video / audio (ריק = ברירת מחדל)"
+        required: false
+        default: ""
+      quality:
+        description: "איכות (מספר או max, ריק = ברירת מחדל)"
+        required: false
+        default: ""
+
+jobs:
+  test-download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # שלוש בדיקות במקביל: shorts וידאו, וידאו רגיל, אודיו
+        include:
+          - name: "Shorts וידאו 1080p"
+            url: "https://www.youtube.com/shorts/GTgarjAw8b8"
+            mode: video
+            quality: "1080"
+          - name: "וידאו רגיל max"
+            url: "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+            mode: video
+            quality: "max"
+          - name: "אודיו mp3 מ-YouTube Music"
+            url: "https://music.youtube.com/watch?v=GTgarjAw8b8"
+            mode: audio
+            quality: "320"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: הרצת סקריפט ההורדה
+        env:
+          OUTPUT_DIR: downloads
+          INPUT_URL: ${{ inputs.url }}
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_QUALITY: ${{ inputs.quality }}
+          MATRIX_URL: ${{ matrix.url }}
+          MATRIX_MODE: ${{ matrix.mode }}
+          MATRIX_QUALITY: ${{ matrix.quality }}
+        run: |
+          chmod +x scripts/download.sh
+          ./download.sh "${INPUT_URL:-$MATRIX_URL}" \
+                        "${INPUT_MODE:-$MATRIX_MODE}" \
+                        "${INPUT_QUALITY:-$MATRIX_QUALITY}"
+
+      - name: סיכום תוצאות
+        if: always()
+        run: |
+          echo "## תוצאות: ${{ matrix.name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -d downloads ] && find downloads -type f -size +1k ! -name "*.log" | grep -q .; then
+            echo "| קובץ | גודל |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|-------|------|" >> "$GITHUB_STEP_SUMMARY"
+            find downloads -type f -size +1k ! -name "*.log" -printf "| %f | %s bytes |\n" >> "$GITHUB_STEP_SUMMARY"
+            echo "✅ **הצליח**" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ **נכשל** — ראה לוגים" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: העלאת קובץ כ-Artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: "video-${{ strategy.job-index }}"
+          path: downloads/
+          retention-days: 7
+          if-no-files-found: warn
