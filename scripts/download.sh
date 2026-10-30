@@ -52,20 +52,22 @@ try_ytdlp() {
     extra+=(-f "bv*[height<=${QUALITY}][ext=mp4]+ba[ext=m4a]/b[height<=${QUALITY}]/b" --merge-output-format mp4)
   fi
 
-  # ניסיון 1: mweb + PO Token
+  # ניסיון 1: mweb + PO Token — עם verbose כדי לראות אם ה-plug-in נטען
   if [ "${PO_SERVER_UP:-0}" = "1" ]; then
     log "מנסה yt-dlp עם mweb + PO Token"
-    if yt-dlp \
+    if yt-dlp -v \
         --extractor-args "youtube:player_client=mweb" \
         --sleep-requests 2 \
         --retries 3 \
         "${extra[@]}" \
         -o "$out_pattern" \
         --no-playlist \
-        "$URL" 2>&1 | tee -a "$LOG_FILE"; then
+        "$URL" >"$OUTPUT_DIR/ytdlp-verbose.log" 2>&1; then
+      tail -5 "$OUTPUT_DIR/ytdlp-verbose.log" | tee -a "$LOG_FILE"
       return 0
     fi
-    log "yt-dlp + mweb נכשל"
+    log "yt-dlp + mweb נכשל — שורות פוט-טוקן מהלוג:"
+    grep -iE "\[pot|bgutil|potoken|po token|provider" "$OUTPUT_DIR/ytdlp-verbose.log" | tail -20 | tee -a "$LOG_FILE"
   fi
 
   # ניסיון 2: clients שאינם דורשים PO Token (tv_simply, android_vr, web_embedded)

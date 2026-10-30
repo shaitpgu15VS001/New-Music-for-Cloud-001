@@ -85,6 +85,7 @@
   <li>2026-10-30: הרצה שנייה — exit 1. אומת מול הקוד הרשמי של bgutil: צורת ההתקנה בסקריפט הייתה שגויה (אין <code>npm run build</code>; הפעלה היא <code>node build/main.js</code> אחרי <code>npx tsc</code>, וגם plugin ה-PyPI נדרש). תוקן</li>
   <li>2026-10-30: הרצה שלישית — לוגים נחשפו: (1) שרת PO Token לא עלה; (2) cobalt החזיר <code>error.api.youtube.login</code> — ה-instance דורש כעת login ליוטיוב (change מאז הבדיקה המקומית). תוקן: כשל בשרת הטוקנים אינו עוצר עוד — yt-dlp ממשיך עם clients שאינם דורשים PO Token (tv_simply/android_vr/web_embedded), הלוגים מוצגים גלוי ב-Summary</li>
   <li>2026-10-30: הרצה רביעית — 3 כשלים שונים זוהו מהלוגים הגלויים: (1) יומן שרת הטוקנים ריק — נתיב הלוג היה יחסי ולאחר cd נרשם לתיקייה לא קיימת; (2) שגיאת <code>height&lt;=max</code> — ערך האיכות max אינו ערך תקין ל-filter של yt-dlp; (3) cobalt <code>invalid_body</code> — נשלח <code>downloadMode:"video"</code> אבל הערך החוקי הוא <code>auto</code>. yt-dlp ללא טוקן נחסם ב-IP של Actions ("Sign in to confirm you're not a bot"). תוקן שלושתם</li>
+  <li>2026-10-30: הרצה חמישית — התקדמות: שרת PO Token <b>עלה בהצלחה</b> ("Started POT server v2.0.2"), אך yt-dlp עם mweb+Token עדיין נחסם ב-"Sign in to confirm you're not a bot" — ייתכן שה-plug-in לא נטען בריצה. נוסף yt-dlp <code>-v</code> + סינון שורות PO Token אל ה-Summary כדי לאשר זאת בבדיקה הבאה</li>
 </ul>
 
 <h2>8. אזהרות ומגבלות</h2>

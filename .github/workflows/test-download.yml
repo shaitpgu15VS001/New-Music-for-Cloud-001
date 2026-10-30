@@ -87,6 +87,12 @@ jobs:
               tail -20 downloads/download.log.bgutil >> "$GITHUB_STEP_SUMMARY"
               echo '```' >> "$GITHUB_STEP_SUMMARY"
             fi
+            if ls downloads/ytdlp-verbose.log >/dev/null 2>&1; then
+              echo '### שורות PO Token מ-youtube (verbose)' >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              grep -iE '\[pot|bgutil|potoken|po token|provider' downloads/ytdlp-verbose.log | tail -25 >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+            fi
           fi
 
       - name: העלאת קובץ כ-Artifact
