@@ -18,13 +18,14 @@ MODE="${2:-video}"          # video | audio
 QUALITY="${3:-1080}"        # מספר (1080, 720...) או max
 OUTPUT_DIR="${OUTPUT_DIR:-downloads}"
 
+# נתיב מוחלט — קריטי: השרת נפתח אחרי cd לתיקייה אחרת
+OUTPUT_DIR="$(mkdir -p "$OUTPUT_DIR" && cd "$OUTPUT_DIR" && pwd)"
+LOG_FILE="$OUTPUT_DIR/download.log"
+
 # רשימת instancות cobalt לבדיקה — ללא טוקן/Turnstile
 COBALT_HOSTS=(
   "https://co.otomir23.me"
 )
-
-mkdir -p "$OUTPUT_DIR"
-LOG_FILE="$OUTPUT_DIR/download.log"
 
 log()  { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" | tee -a "$LOG_FILE"; }
 fail() { log "✖ $*"; exit 1; }
@@ -35,22 +36,23 @@ fail() { log "✖ $*"; exit 1; }
 try_ytdlp() {
   log "שכבה 1: yt-dlp + PO Token provider"
 
-  # התקנת yt-dlp + plugin ה-PO Token (הפלגין נדרש כדי שyt-dlp יפנה לשרת הטוקנים)
   python3 -m pip install --quiet --upgrade "yt-dlp" "bgutil-ytdlp-pot-provider" >>"$LOG_FILE" 2>&1 \
     || { log "התקנת yt-dlp / bgutil plugin נכשלה"; return 1; }
 
-  # התחלת שרת ה-PO Token (ההתקנה שלו עלולה להיכשל — לא נעצור בגללו)
   start_po_server
 
   local out_pattern="$OUTPUT_DIR/%(title)s [%(id)s].%(ext)s"
   local -a extra=()
   if [ "$MODE" = "audio" ]; then
     extra+=(-x --audio-format mp3 --audio-quality 0)
+  elif [ "$QUALITY" = "max" ]; then
+    # "max" אינו ערך תקין ל-filter של yt-dlp — משמיטים את סינון הגובה
+    extra+=(-f "bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/b" --merge-output-format mp4)
   else
     extra+=(-f "bv*[height<=${QUALITY}][ext=mp4]+ba[ext=m4a]/b[height<=${QUALITY}]/b" --merge-output-format mp4)
   fi
 
-  # ניסיון 1: mweb + PO Token (נדרש quality גבוה / GVS)
+  # ניסיון 1: mweb + PO Token
   if [ "${PO_SERVER_UP:-0}" = "1" ]; then
     log "מנסה yt-dlp עם mweb + PO Token"
     if yt-dlp \
@@ -66,7 +68,7 @@ try_ytdlp() {
     log "yt-dlp + mweb נכשל"
   fi
 
-  # ניסיון 2: clients שאינם דורשים PO Token כלל (tv_simply, android_vr, web_embedded)
+  # ניסיון 2: clients שאינם דורשים PO Token (tv_simply, android_vr, web_embedded)
   local clients="tv_simply,android_vr,web_embedded"
   log "מנסה yt-dlp עם clients שאינם דורשים PO Token: $clients"
   if yt-dlp \
@@ -85,11 +87,12 @@ try_ytdlp() {
 }
 
 # -----------------------------------------------------------------------------
-# הקמת שרת PO Token — best effort, כשל כאן לא עוצר את התהליך
+# הקמת שרת PO Token — best effort
 # -----------------------------------------------------------------------------
 start_po_server() {
   PO_SERVER_UP=0
   local bgutil_dir="$HOME/bgutil-ytdlp-pot-provider"
+  local server_log="$OUTPUT_DIR/download.log.bgutil"
 
   if [ ! -d "$bgutil_dir" ]; then
     git clone --depth 1 --single-branch --branch 2.0.2 \
@@ -101,9 +104,12 @@ start_po_server() {
   (cd "$bgutil_dir/server" && npm ci --no-audit --no-fund && npx tsc) >>"$LOG_FILE" 2>&1 \
     || { log "npm ci / tsc של bgutil נכשל — אמשיך בלי שרת טוקנים (פרטים ב-LOG)"; return 0; }
 
-  # הפעלה + המתנה עם ניסיונות חוזרים (עד 60 שניות)
-  (cd "$bgutil_dir/server" && node build/main.js >"$LOG_FILE.bgutil" 2>&1 &
-   echo $! > /tmp/bgutil.pid)
+  # הפעלה — לוג בנתיב מוחלט, cd קורה בתת-תהליך נפרד מההפניה
+  (
+    cd "$bgutil_dir/server" || exit 1
+    node build/main.js >"$server_log" 2>&1 &
+    echo $! > /tmp/bgutil.pid
+  )
   local i
   for i in $(seq 1 12); do
     sleep 5
@@ -114,7 +120,7 @@ start_po_server() {
     fi
   done
   log "שרת PO Token לא עלה — אמשיך בלי טוקנים"
-  log "יומן השרת: $(tail -5 "$LOG_FILE.bgutil" 2>/dev/null | tr '\n' ' ')"
+  log "יומן השרת: $(tail -5 "$server_log" 2>/dev/null | tr '\n' ' ')"
 }
 
 # -----------------------------------------------------------------------------
@@ -122,11 +128,14 @@ start_po_server() {
 # -----------------------------------------------------------------------------
 try_cobalt() {
   log "שכבה 2: cobalt API"
+  # ל- cobalt ערכי downloadMode הם auto/audio/mute — "video" אינו ערך חוקי
   local body
   if [ "$MODE" = "audio" ]; then
     body="{\"url\":\"$URL\",\"downloadMode\":\"audio\",\"audioFormat\":\"mp3\",\"audioBitrate\":\"320\"}"
+  elif [ "$QUALITY" = "max" ]; then
+    body="{\"url\":\"$URL\",\"downloadMode\":\"auto\",\"videoQuality\":\"max\"}"
   else
-    body="{\"url\":\"$URL\",\"downloadMode\":\"video\",\"videoQuality\":\"$QUALITY\"}"
+    body="{\"url\":\"$URL\",\"downloadMode\":\"auto\",\"videoQuality\":\"$QUALITY\"}"
   fi
   local host
   for host in "${COBALT_HOSTS[@]}"; do
