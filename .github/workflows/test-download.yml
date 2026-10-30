@@ -39,13 +39,13 @@ jobs:
             quality: "320"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "22"
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -60,7 +60,7 @@ jobs:
           MATRIX_QUALITY: ${{ matrix.quality }}
         run: |
           chmod +x scripts/download.sh
-          ./download.sh "${INPUT_URL:-$MATRIX_URL}" \
+          bash scripts/download.sh "${INPUT_URL:-$MATRIX_URL}" \
                         "${INPUT_MODE:-$MATRIX_MODE}" \
                         "${INPUT_QUALITY:-$MATRIX_QUALITY}"
 
@@ -79,7 +79,7 @@ jobs:
           fi
 
       - name: העלאת קובץ כ-Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: "video-${{ strategy.job-index }}"
