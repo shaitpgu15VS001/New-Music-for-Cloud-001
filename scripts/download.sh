@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # -----------------------------------------------------------------------------
-# download.sh — הורדה מיוטיוב / יוטיוב מיוזיק בשתי שכבות גיבוי
+# download.sh — הורדה מיוטיוב / יוטיוב מיוזיק בשלוש שכבות גיבוי
 #
 # שימוש:
 #   ./download.sh <url> [video|audio] [איכות: מספר או max, ברירת מחדל 1080]
 #
 # שכבה 1: yt-dlp + PO Token provider (bgutil) — ללא חשבון Google
-# שכבה 2: cobalt API ציבורי — אם שכבה 1 נכשלת
+# שכבה 1b: yt-dlp עם clients שאינם דורשים PO Token כלל
+# שכבה 2: cobalt API ציבורי — אם השכבות הקודמות נכשלות
 #
-# הקובץ נשמרת בתיקיית ./downloads (ניתן לשנות במשתנה OUTPUT_DIR)
+# הקבצים נשמרים בתיקיית ./downloads (ניתן לשנות במשתנה OUTPUT_DIR)
 # -----------------------------------------------------------------------------
 set -u -o pipefail
 
@@ -29,36 +30,17 @@ log()  { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" | tee -a "$LOG_FILE"; }
 fail() { log "✖ $*"; exit 1; }
 
 # -----------------------------------------------------------------------------
-# שכבה 1 — yt-dlp + PO Token
+# שכבה 1 — yt-dlp (+ PO Token אם השרת זמין)
 # -----------------------------------------------------------------------------
 try_ytdlp() {
   log "שכבה 1: yt-dlp + PO Token provider"
 
   # התקנת yt-dlp + plugin ה-PO Token (הפלגין נדרש כדי שyt-dlp יפנה לשרת הטוקנים)
-  python3 -m pip install --quiet --upgrade "yt-dlp" "bgutil-ytdlp-pot-provider" >/dev/null 2>&1 \
+  python3 -m pip install --quiet --upgrade "yt-dlp" "bgutil-ytdlp-pot-provider" >>"$LOG_FILE" 2>&1 \
     || { log "התקנת yt-dlp / bgutil plugin נכשלה"; return 1; }
 
-  # שרת ה-PO Token — הוראה רשמית: npm ci && npx tsc (אין npm run build)
-  local bgutil_dir="$HOME/bgutil-ytdlp-pot-provider"
-  if [ ! -d "$bgutil_dir" ]; then
-    git clone --depth 1 --single-branch --branch 2.0.2 \
-      https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git "$bgutil_dir" >/dev/null 2>&1 \
-      || { log "git clone של bgutil נכשל"; return 1; }
-  fi
-  (cd "$bgutil_dir/server" && npm ci --silent >/dev/null 2>&1 && npx tsc >/dev/null 2>&1) \
-    || { log "npm ci / tsc של bgutil נכשל"; return 1; }
-
-  # הפעלת שרת ה-PO Token ברקע — לפי התיעוד הרשמי: npx tsc ואז node build/main.js
-  (cd "$bgutil_dir/server" && node build/main.js >"$LOG_FILE.bgutil" 2>&1 &
-   echo $! > /tmp/bgutil.pid)
-  sleep 8
-  # /ping מחזיר JSON עם server_uptime ו-version
-  if ! curl -s --max-time 5 http://127.0.0.1:4416/ping | grep -q "server_uptime"; then
-    log "שרת PO Token לא עלה על פורט 4416"
-    cat "$LOG_FILE.bgutil" 2>/dev/null | tail -5
-    return 1
-  fi
-  log "שרת PO Token פעיל ✓"
+  # התחלת שרת ה-PO Token (ההתקנה שלו עלולה להיכשל — לא נעצור בגללו)
+  start_po_server
 
   local out_pattern="$OUTPUT_DIR/%(title)s [%(id)s].%(ext)s"
   local -a extra=()
@@ -68,8 +50,27 @@ try_ytdlp() {
     extra+=(-f "bv*[height<=${QUALITY}][ext=mp4]+ba[ext=m4a]/b[height<=${QUALITY}]/b" --merge-output-format mp4)
   fi
 
+  # ניסיון 1: mweb + PO Token (נדרש quality גבוה / GVS)
+  if [ "${PO_SERVER_UP:-0}" = "1" ]; then
+    log "מנסה yt-dlp עם mweb + PO Token"
+    if yt-dlp \
+        --extractor-args "youtube:player_client=mweb" \
+        --sleep-requests 2 \
+        --retries 3 \
+        "${extra[@]}" \
+        -o "$out_pattern" \
+        --no-playlist \
+        "$URL" 2>&1 | tee -a "$LOG_FILE"; then
+      return 0
+    fi
+    log "yt-dlp + mweb נכשל"
+  fi
+
+  # ניסיון 2: clients שאינם דורשים PO Token כלל (tv_simply, android_vr, web_embedded)
+  local clients="tv_simply,android_vr,web_embedded"
+  log "מנסה yt-dlp עם clients שאינם דורשים PO Token: $clients"
   if yt-dlp \
-      --extractor-args "youtube:player_client=mweb" \
+      --extractor-args "youtube:player_client=$clients" \
       --sleep-requests 2 \
       --retries 3 \
       "${extra[@]}" \
@@ -78,8 +79,42 @@ try_ytdlp() {
       "$URL" 2>&1 | tee -a "$LOG_FILE"; then
     return 0
   fi
-  log "yt-dlp נכשל"
+
+  log "yt-dlp נכשל בכל הניסיונות"
   return 1
+}
+
+# -----------------------------------------------------------------------------
+# הקמת שרת PO Token — best effort, כשל כאן לא עוצר את התהליך
+# -----------------------------------------------------------------------------
+start_po_server() {
+  PO_SERVER_UP=0
+  local bgutil_dir="$HOME/bgutil-ytdlp-pot-provider"
+
+  if [ ! -d "$bgutil_dir" ]; then
+    git clone --depth 1 --single-branch --branch 2.0.2 \
+      https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git "$bgutil_dir" >>"$LOG_FILE" 2>&1 \
+      || { log "git clone של bgutil נכשל — אמשיך בלי שרת טוקנים"; return 0; }
+  fi
+
+  log "מתקין ומקompil את שרת ה-PO Token (יכול להימשך כדקה)..."
+  (cd "$bgutil_dir/server" && npm ci --no-audit --no-fund && npx tsc) >>"$LOG_FILE" 2>&1 \
+    || { log "npm ci / tsc של bgutil נכשל — אמשיך בלי שרת טוקנים (פרטים ב-LOG)"; return 0; }
+
+  # הפעלה + המתנה עם ניסיונות חוזרים (עד 60 שניות)
+  (cd "$bgutil_dir/server" && node build/main.js >"$LOG_FILE.bgutil" 2>&1 &
+   echo $! > /tmp/bgutil.pid)
+  local i
+  for i in $(seq 1 12); do
+    sleep 5
+    if curl -s --max-time 5 http://127.0.0.1:4416/ping 2>/dev/null | grep -q "server_uptime"; then
+      PO_SERVER_UP=1
+      log "שרת PO Token פעיל ✓"
+      return 0
+    fi
+  done
+  log "שרת PO Token לא עלה — אמשיך בלי טוקנים"
+  log "יומן השרת: $(tail -5 "$LOG_FILE.bgutil" 2>/dev/null | tr '\n' ' ')"
 }
 
 # -----------------------------------------------------------------------------
@@ -126,7 +161,6 @@ try_cobalt() {
 # -----------------------------------------------------------------------------
 verify_output() {
   local f
-  # קובץ חדש (אחרי התחלת הריצה) בגודל מעל 1KB שאינו לוג
   f=$(find "$OUTPUT_DIR" -type f -size +1k -mmin -30 ! -name "*.log" | head -1)
   if [ -z "$f" ]; then
     fail "לא נמצא קובץ פלט תקין"

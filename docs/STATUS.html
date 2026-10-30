@@ -82,7 +82,8 @@
   <li>2026-10-30: כתיבת <code>scripts/download.sh</code> (2 שכבות)</li>
   <li>2026-10-30: כתיבת <code>.github/workflows/test-download.yml</code> (3 בדיקות במקביל)</li>
   <li>2026-10-30: הרצה ראשונה — 3 בדיקות נכשלו עם exit 127. גורם השורש: ה-workflow הריץ <code>./download.sh</code> במקום <code>scripts/download.sh</code>. תוקן + נוספה שורת <code>.gitattributes</code> לאכיפת LF + עדכון actions לגרסאות без Node 20</li>
-  <li>2026-10-30: הרצה שנייה — exit 1. אומת מול הקוד הרשמי של bgutil: צורת ההתקנה בסקריפט הייתה שגויה (אין <code>npm run build</code>; הפעלה היא <code>node build/main.js</code> אחרי <code>npx tsc</code>, וגם plugin ה-PyPI נדרש). תוקן. נוסף צעד שמדפיס 30 שורות לוג אחרונות ל-Summary במקרה של כישלון</li>
+  <li>2026-10-30: הרצה שנייה — exit 1. אומת מול הקוד הרשמי של bgutil: צורת ההתקנה בסקריפט הייתה שגויה (אין <code>npm run build</code>; הפעלה היא <code>node build/main.js</code> אחרי <code>npx tsc</code>, וגם plugin ה-PyPI נדרש). תוקן</li>
+  <li>2026-10-30: הרצה שלישית — לוגים נחשפו: (1) שרת PO Token לא עלה; (2) cobalt החזיר <code>error.api.youtube.login</code> — ה-instance דורש כעת login ליוטיוב (change מאז הבדיקה המקומית). תוקן: כשל בשרת הטוקנים אינו עוצר עוד — yt-dlp ממשיך עם clients שאינם דורשים PO Token (tv_simply/android_vr/web_embedded), הלוגים מוצגים גלוי ב-Summary</li>
 </ul>
 
 <h2>8. אזהרות ומגבלות</h2>
