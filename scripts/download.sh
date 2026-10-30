@@ -53,9 +53,12 @@ try_ytdlp() {
   fi
 
   # ניסיון 1: mweb + PO Token — עם verbose כדי לראות אם ה-plug-in נטען
+  # --js-runtimes node: yt-dlp אינו מפעיל אוטומטית node לפתרון JS challenges,
+  # וללא פתרון אתגרים YouTube חוסם ("not a bot")
   if [ "${PO_SERVER_UP:-0}" = "1" ]; then
-    log "מנסה yt-dlp עם mweb + PO Token"
+    log "מנסה yt-dlp עם mweb + PO Token + node JS runtime"
     if yt-dlp -v \
+        --js-runtimes node \
         --extractor-args "youtube:player_client=mweb" \
         --sleep-requests 2 \
         --retries 3 \
@@ -67,13 +70,14 @@ try_ytdlp() {
       return 0
     fi
     log "yt-dlp + mweb נכשל — שורות פוט-טוקן מהלוג:"
-    grep -iE "\[pot|bgutil|potoken|po token|provider" "$OUTPUT_DIR/ytdlp-verbose.log" | tail -20 | tee -a "$LOG_FILE"
+    grep -iE "\[pot|bgutil|potoken|po token|provider|jsc" "$OUTPUT_DIR/ytdlp-verbose.log" | tail -20 | tee -a "$LOG_FILE"
   fi
 
   # ניסיון 2: clients שאינם דורשים PO Token (tv_simply, android_vr, web_embedded)
   local clients="tv_simply,android_vr,web_embedded"
   log "מנסה yt-dlp עם clients שאינם דורשים PO Token: $clients"
   if yt-dlp \
+      --js-runtimes node \
       --extractor-args "youtube:player_client=$clients" \
       --sleep-requests 2 \
       --retries 3 \
