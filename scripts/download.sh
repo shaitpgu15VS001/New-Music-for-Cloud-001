@@ -73,20 +73,29 @@ try_ytdlp() {
     grep -iE "\[pot|bgutil|potoken|po token|provider|jsc" "$OUTPUT_DIR/ytdlp-verbose.log" | tail -20 | tee -a "$LOG_FILE"
   fi
 
-  # ניסיון 2: clients שאינם דורשים PO Token (tv_simply, android_vr, web_embedded)
-  local clients="tv_simply,android_vr,web_embedded"
-  log "מנסה yt-dlp עם clients שאינם דורשים PO Token: $clients"
-  if yt-dlp \
-      --js-runtimes node \
-      --extractor-args "youtube:player_client=$clients" \
-      --sleep-requests 2 \
-      --retries 3 \
-      "${extra[@]}" \
-      -o "$out_pattern" \
-      --no-playlist \
-      "$URL" 2>&1 | tee -a "$LOG_FILE"; then
-    return 0
-  fi
+  # ניסיון 2: clients שאינם דורשים PO Token — כל אחד בנפרד, עם המתנה
+  # ביניהם: 3 מטריצות במקביל מאותה רשת עלולות להפעיל הגנת rate-limit של YouTube
+  local pass client
+  for pass in 1 2; do
+    for client in tv_simply android_vr web_embedded; do
+      log "מנסה yt-dlp עם client: $client (סבב $pass)"
+      sleep 15
+      if yt-dlp \
+          --js-runtimes node \
+          --extractor-args "youtube:player_client=$client" \
+          --sleep-requests 3 \
+          --retries 3 \
+          "${extra[@]}" \
+          -o "$out_pattern" \
+          --no-playlist \
+          "$URL" >"$OUTPUT_DIR/ytdlp-verbose.log" 2>&1; then
+        log "✔ client $client הצליח"
+        tail -3 "$OUTPUT_DIR/ytdlp-verbose.log" | tee -a "$LOG_FILE"
+        return 0
+      fi
+      log "  ✖ $client: $(grep -m1 '^ERROR' "$OUTPUT_DIR/ytdlp-verbose.log" 2>/dev/null | cut -c1-120)"
+    done
+  done
 
   log "yt-dlp נכשל בכל הניסיונות"
   return 1
