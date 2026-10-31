@@ -18,6 +18,17 @@ MODE="${2:-video}"          # video | audio
 QUALITY="${3:-1080}"        # מספר (1080, 720...) או max
 OUTPUT_DIR="${OUTPUT_DIR:-downloads}"
 
+# נרמול קישורי youtube: /shorts/ ו-music.youtube.com הולכים לנתיבים שונים ב-extractor
+# paths שנחסמים לעתים קרובות יותר מ-IP של דאטה סנטר — ממירים לצורת watch
+if echo "$URL" | grep -qE "youtube\.com/shorts/"; then
+  VID=$(echo "$URL" | grep -oE "shorts/[A-Za-z0-9_-]+" | cut -d/ -f2)
+  [ -n "$VID" ] && URL="https://www.youtube.com/watch?v=$VID"
+fi
+if echo "$URL" | grep -q "music.youtube.com"; then
+  VID=$(echo "$URL" | grep -oE "v=[A-Za-z0-9_-]+" | cut -d= -f2)
+  [ -n "$VID" ] && URL="https://www.youtube.com/watch?v=$VID"
+fi
+
 # נתיב מוחלט — קריטי: השרת נפתח אחרי cd לתיקייה אחרת
 OUTPUT_DIR="$(mkdir -p "$OUTPUT_DIR" && cd "$OUTPUT_DIR" && pwd)"
 LOG_FILE="$OUTPUT_DIR/download.log"
@@ -56,21 +67,26 @@ try_ytdlp() {
   # --js-runtimes node: yt-dlp אינו מפעיל אוטומטית node לפתרון JS challenges,
   # וללא פתרון אתגרים YouTube חוסם ("not a bot")
   if [ "${PO_SERVER_UP:-0}" = "1" ]; then
-    log "מנסה yt-dlp עם mweb + PO Token + node JS runtime"
-    if yt-dlp -v \
-        --js-runtimes node \
-        --extractor-args "youtube:player_client=mweb" \
-        --sleep-requests 2 \
-        --retries 3 \
-        "${extra[@]}" \
-        -o "$out_pattern" \
-        --no-playlist \
-        "$URL" >"$OUTPUT_DIR/ytdlp-verbose.log" 2>&1; then
-      tail -5 "$OUTPUT_DIR/ytdlp-verbose.log" | tee -a "$LOG_FILE"
-      return 0
-    fi
-    log "yt-dlp + mweb נכשל — שורות פוט-טוקן מהלוג:"
-    grep -iE "\[pot|bgutil|potoken|po token|provider|jsc" "$OUTPUT_DIR/ytdlp-verbose.log" | tail -20 | tee -a "$LOG_FILE"
+    local pot_client
+    for pot_client in mweb web; do
+      log "מנסה yt-dlp עם $pot_client + PO Token + node JS runtime"
+      if yt-dlp -v \
+          --js-runtimes node \
+          --extractor-args "youtube:player_client=$pot_client" \
+          --sleep-requests 2 \
+          --retries 3 \
+          "${extra[@]}" \
+          -o "$out_pattern" \
+          --no-playlist \
+          "$URL" >"$OUTPUT_DIR/ytdlp-verbose.log" 2>&1; then
+        tail -5 "$OUTPUT_DIR/ytdlp-verbose.log" | tee -a "$LOG_FILE"
+        return 0
+      fi
+      log "  ✖ $pot_client+PO Token: $(grep -m1 '^ERROR' "$OUTPUT_DIR/ytdlp-verbose.log" 2>/dev/null | cut -c1-120)"
+      sleep 10
+    done
+    log "שורות פוט-טוקן אחרונות מהלוג:"
+    grep -iE "\[pot|bgutil|potoken|po token|provider|jsc" "$OUTPUT_DIR/ytdlp-verbose.log" | tail -10 | tee -a "$LOG_FILE"
   fi
 
   # ניסיון 2: clients שאינם דורשים PO Token — כל אחד בנפרד, עם המתנה
