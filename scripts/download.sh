@@ -69,6 +69,7 @@ try_android_web() {
   # android + web — השילוב שמאומן לעבוד מ-Datacenter IPs
   # android: זיהוי bot חלש, עובד מ-DC IPs
   # web: פותח פורמטים נוספים אך דורש התאמה
+  # --force-ipv4: מאלץ שימוש ב-IPv4 בלבד, לעקיפת חסימות IP של DC
   local -a clients=("android" "web_embedded" "web")
   local pass client
 
@@ -82,6 +83,7 @@ try_android_web() {
           --extractor-args "youtube:player_client=$client" \
           --sleep-requests 5 \
           --retries 5 \
+          --force-ipv4 \
           "${extra[@]}" \
           -o "$out_pattern" \
           --no-playlist \
