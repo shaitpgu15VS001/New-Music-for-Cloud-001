@@ -23,9 +23,11 @@
 <h2>מה זה</h2>
 <p>סקריפט הורדה מיוטיוב ויוטיוב מיוזיק שפועל בשתי שכבות גיבוי, ללא צורך בחשבון גוגל:</p>
 <ul>
-  <li><b>שכבה 1</b> — yt-dlp עם PO Token provider (bgutil): מייצר את טוקן האימות שהיום YouTube דורשת, בלי חשבון</li>
+  <li><b>שכבה 1</b> — yt-dlp עם לקוחות שמאומתים לעבוד מ-IPs של דאטה סנטר (בלי PO Token ובלי חשבון)</li>
   <li><b>שכבה 2</b> — cobalt API ציבורי: אם שכבה 1 נחסמת, עוברים ל-instance קהילתי ללא טוקן</li>
 </ul>
+<p><b>מצב נוכחי:</b> הבדיקות רצות דרך proxy חינמי של Cloudflare WARP שמתבצע בתוך ה-runner עצמו —
+כך ש-YouTube רואה כתובת יציאה שאינה חסומה. לפרטים: <code>docs/STATUS.html</code>.</p>
 
 <h2>הרצה מקומית</h2>
 <pre>./scripts/download.sh "https://www.youtube.com/shorts/GTgarjAw8b8" video 1080</pre>
@@ -35,11 +37,13 @@
 
 <h2>הרצה מ-GitHub Actions</h2>
 <ol>
-  <li>דחפו את הפרויקט ל-repo ב-Gitאב</li>
-  <li>בכרטיסיית <b>Actions</b> בחרו <b>בדיקת הורדה מיוטיוב</b></li>
+  <li>דחפו את הפרויקט ל-repo ב-Gיטאב</li>
+  <li>בכרטיסיית <b>Actions</b> בחרו <b>בדיקת הורדה דרך WARP proxy</b> (הניסוי הנוכחי)</li>
   <li>לחצו <b>Run workflow</b> — ניתן להשאיר את ברירות המחדל (3 בדיקות במקביל)</li>
   <li>בתום הריצה, הורידו את ה-<b>Artifact</b> כדי לראות את האיכות בפועל</li>
 </ol>
+<p>קיים גם workflow ישן בשם <b>בדיקת הורדה מיוטיוב</b> (<code>test-download.yml</code>)ללא פרוקסי —
+למעקב אחרי ההבדל בין ריצה ישירה לריצה דרך WARP.</p>
 
 <div class="tip">
 <b>טיפ:</b> בדף התוצאות (Summary) של ה-Actions תראו טבלה עם שם הבדיקה, גודל הקובץ, ואיזו שכבה הצליחה.
@@ -47,7 +51,10 @@
 
 <h2>פתרון תקלות</h2>
 <ul>
-  <li><b>"Sign in to confirm you're not a bot"</b> — שכבה 1 נחסמה. בדקו ב-LOG האם שרת ה-PO Token עלה (פורט 4416). אם לא — שכבה 2 אמורה להשתלט אוטומטית</li>
+  <li><b>שלב "בדיקת WARP" נכשל ב workflow</b> — ה-proxy לא עלה או שהתעבורה לא יצאה דרך WARP.
+    בדקו ב-LOG את קובץ <code>wireproxy.log</code> שמוצג בשגיאה. לעתים קרובות ריצה חוזרת פותרת</li>
+  <li><b>"Sign in to confirm you're not a bot"</b> — yt-dlp לא עבד דרך הפרוקסי או שהכתובת שנבחרה חסומה.
+    בדקו ב-LOG שהופיעה שורת "yt-dlp עובד דרך פרוקסי"</li>
   <li><b>cobalt החזיר שגיאת auth</b> — ה-instance הוסיף הגנה. בדקו <code>docs/STATUS.html</code> לinstancות עדכניות</li>
   <li><b>הקובץ ירד אבל ריק/קטן</b> — לרוב האיכות שביקשת אינה זמינה. נסו איכות נמוכה יותר או מצב audio</li>
 </ul>

@@ -1,0 +1,178 @@
+name: בדיקת הורדה דרך WARP proxy
+
+# מטרת הניסוי: לבדוק אם עקיפת IP המסומן של GitHub באמצעות Cloudflare WARP
+# מאפשרת הורדה מלאה מיוטיוב (וידאו 1080p, יוטיוב מיוזיק, שורטס).
+# שלושת השלבים: (1) הקמת proxy חינמי ב-runner, (2) בדיקה שהוא פעיל,
+# (3) הורדה דרכו עם scripts/download.sh.
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "קישור יוטיוב (ריק = שימוש בבדיקות המטריצה)"
+        required: false
+        default: ""
+      mode:
+        description: "מצב הורדה: video / audio (ריק = ברירת מחדל)"
+        required: false
+        default: ""
+      quality:
+        description: "איכות (מספר או max, ריק = ברירת מחדל)"
+        required: false
+        default: ""
+
+jobs:
+  test-warp-download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        # שלוש בדיקות במקביל: shorts וידאו, וידאו רגיל, אודיו מ-YouTube Music
+        include:
+          - name: "Shorts וידאו 1080p"
+            url: "https://www.youtube.com/shorts/GTgarjAw8b8"
+            mode: video
+            quality: "1080"
+          - name: "וידאו רגיל max"
+            url: "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+            mode: video
+            quality: "max"
+          - name: "אודיו mp3 מ-YouTube Music"
+            url: "https://music.youtube.com/watch?v=GTgarjAw8b8"
+            mode: audio
+            quality: "320"
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      # --- שלב 1: הקמת proxy חינמי של Cloudflare WARP -----------------------
+      # wgcf יוצר חשבון WARP חינמי ופרופיל WireGuard — ללא דוא"ל וללא טלפון.
+      # wireproxy מריץ את הפרופיל כתהליך משתמש (בלי הרשאות מנהל) וחשוף
+      # כ-proxy HTTP מקומי בפורט 1080.
+      - name: הקמת Cloudflare WARP כ-proxy מקומי
+        run: |
+          set -euo pipefail
+          mkdir -p warp
+          cd warp
+
+          echo "::group::הורדת wgcf ויצירת חשבון WARP"
+          curl -fsSL -o wgcf https://github.com/ViRb3/wgcf/releases/download/v2.3.1/wgcf_2.3.1_linux_amd64
+          chmod +x wgcf
+          ./wgcf register --accept-tos
+          ./wgcf generate
+          echo "::endgroup::"
+
+          echo "::group::הורדת wireproxy"
+          curl -fsSL -o wireproxy.tgz https://github.com/windtf/wireproxy/releases/download/v1.1.3/wireproxy_linux_amd64.tar.gz
+          tar -xzf wireproxy.tgz
+          echo "::endgroup::"
+
+          # הוספת שכבת proxy HTTP לפרופיל ה-WireGuard שהופק ע"י wgcf
+          printf '\n[http]\nBindAddress = 127.0.0.1:1080\n' >> wgcf-profile.conf
+
+          # הפעלה ברקע + המתנה לעליית ה-proxy (עד 30 שניות)
+          nohup ./wireproxy -c wgcf-profile.conf > wireproxy.log 2>&1 &
+          echo $! > wireproxy.pid
+          up=0
+          for i in $(seq 1 15); do
+            sleep 2
+            if curl -fsS --max-time 5 -x http://127.0.0.1:1080 \
+                 https://www.cloudflare.com/cdn-cgi/trace -o /dev/null 2>/dev/null; then
+              up=1
+              echo "ה-proxy עלה אחרי $((i * 2)) שניות"
+              break
+            fi
+          done
+          if [ "$up" != "1" ]; then
+            echo "::error::ה-proxy לא עלה תוך 30 שניות"
+            cat wireproxy.log >&2
+            exit 1
+          fi
+
+      # --- שלב 2: וידוא שהתעבורה באמת יוצאת דרך WARP ------------------------
+      - name: בדיקת WARP — האם כתובת היציאה השתנתה
+        run: |
+          set -euo pipefail
+          cd warp
+          direct_ip=$(curl -fsS --max-time 10 https://www.cloudflare.com/cdn-cgi/trace \
+                        | grep '^ip=' | cut -d= -f2)
+          trace=$(curl -fsS --max-time 15 -x http://127.0.0.1:1080 \
+                    https://www.cloudflare.com/cdn-cgi/trace)
+          warp_ip=$(echo "$trace" | grep '^ip=' | cut -d= -f2)
+          warp_status=$(echo "$trace" | grep '^warp=' | cut -d= -f2)
+
+          {
+            echo "## בדיקת WARP — ${{ matrix.name }}"
+            echo ""
+            echo "| מדד | ערך |"
+            echo "|------|------|"
+            echo "| IP ישיר של ה-runner | \`$direct_ip\` |"
+            echo "| IP דרך הפרוקסי | \`$warp_ip\` |"
+            echo "| warp | \`$warp_status\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -z "$warp_ip" ] || [ "$warp_ip" = "$direct_ip" ]; then
+            echo "::error::התעבורה לא עוברת דרך הפרוקסי (הכתובת לא השתנתה)"
+            exit 1
+          fi
+          echo "✔ כתובת היציאה השתנתה — התעבורה עוברת בפרוקסי"
+
+      # --- שלב 3: הורדה דרך הפרוקסי -----------------------------------------
+      - name: הרצת סקריפט ההורדה דרך הפרוקסי
+        env:
+          OUTPUT_DIR: downloads
+          YTDLP_PROXY: "http://127.0.0.1:1080"
+          INPUT_URL: ${{ inputs.url }}
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_QUALITY: ${{ inputs.quality }}
+          MATRIX_URL: ${{ matrix.url }}
+          MATRIX_MODE: ${{ matrix.mode }}
+          MATRIX_QUALITY: ${{ matrix.quality }}
+        run: |
+          chmod +x scripts/download.sh
+          bash scripts/download.sh "${INPUT_URL:-$MATRIX_URL}" \
+                        "${INPUT_MODE:-$MATRIX_MODE}" \
+                        "${INPUT_QUALITY:-$MATRIX_QUALITY}"
+
+      - name: סיכום תוצאות
+        if: always()
+        run: |
+          echo "## תוצאות: ${{ matrix.name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -d downloads ] && find downloads -type f -size +1k ! -name "*.log" | grep -q .; then
+            echo "| קובץ | גודל |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|-------|------|" >> "$GITHUB_STEP_SUMMARY"
+            find downloads -type f -size +1k ! -name "*.log" -printf "| %f | %s bytes |\n" >> "$GITHUB_STEP_SUMMARY"
+            echo "✅ **הצליח**" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ **נכשל** — הלוגים למטה" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo '### לוג ההורדה (30 שורות אחרונות)' >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -30 downloads/download.log 2>/dev/null >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            if [ -f downloads/ytdlp-verbose.log ]; then
+              echo '### לוג yt-dlp (30 שורות אחרונות)' >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              tail -30 downloads/ytdlp-verbose.log >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+
+      - name: העלאת קובץ כ-Artifact
+        uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: "warp-video-${{ strategy.job-index }}"
+          path: downloads/
+          retention-days: 7
+          if-no-files-found: warn

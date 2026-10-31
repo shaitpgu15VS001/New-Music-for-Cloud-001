@@ -23,88 +23,118 @@
 <body>
 
 <h1>הורדה מיוטיוב — מצב הפרויקט</h1>
-<p class="date">עודכן: 2026-10-30</p>
+<p class="date">עודכן: 2026-11-01</p>
 
 <h2>1. סקירה</h2>
 <p>מטרת הפרויקט: אוטומציית הורדה מיוטיוב ויוטיוב מיוזיק שתפעל מ-GitHub Actions
-<b>ללא קוקיז של חשבון גוגל</b> (כיוון ש-YouTube חוסם IP של דאטה סנטר ודורש אימות).
-השלב הנוכחי: <b>אימות בלבד</b> — לבדוק ששתי שיטות הורדה עובדות מ-IP של GitHub, ורק אחר כך לבנות את שאר האוטומציה (scraper, Mega וכו').</p>
+<b>ללא קוקיז של חשבון גוגל</b>. הקושי המרכזי: YouTube חוסם IP של דאטה סנטר
+("Sign in to confirm you're not a bot"). הדרישות: וידאו, YouTube Music ו-Shorts באיכות רגילה (לא נמוכה),
+ללא אימות טלפון בפלטפורמת משנה.</p>
 
 <h2>2. מצב נוכחי</h2>
-<p>הושלם: סקריפט הורדה דו-שכבתי ו-workflow בדיקה. ממתינים להרצת הבדיקה הראשונה מ-GitHub Actions.</p>
+<p>שתי שיטות קודמות נפסלו (PO Token — איכות נמוכה בלבד; Replit — אימות טלפון).
+הכיוון הנוכחי: <b>ניסוי Cloudflare WARP כ-proxy בתוך ה-runner של GitHub Actions</b>.
+הוכנו: סקריפט הורדה מתוקן עם תמיכת פרוקסי + workflow ניסוי חדש. ממתינים להרצה ראשונה.</p>
 
 <h2>3. פתוח כרגע</h2>
 <ol>
-  <li>דחיפה ל-repo ב-Gitאב והרצת <code>test-download.yml</code> ידנית</li>
-  <li>בדיקת תוצאות: האם yt-dlp עם client=android,web עובד מ-IP של Actions (ללא PO Token)</li>
-  <li>בדיקת איכות הארטיפקט (1080p וידאו, mp3 אודיו)</li>
-  <li>אחרי אישור — תכנון הטריגר (schedule) ושאר שלבי האוטומציה</li>
-</ol>
-<p class="warn"><b>שינוי מהותי:</b> הוספת שכבת yt-dlp עם <code>player_client=android,web</code> שמאומן ל-IPs של Data Center ללא תלות ב-PO Token. השיטה הישנה התבססה על bgutil PO Token שמאומן שלא עובד על IPs שכבר נחסמו.</p>
+  <li>דחיפה ל-repo והרצה ידנית של <code>test-warp-download.yml</code></li>
+  <li>בדיקת שלב 2 ב-workflow: האם כתובת היציאה אכן משתנה ב-runner (warp פעיל)</li>
+  <li>בדיקת שלוש הבדיקות: Shorts 1080p, וידאו max, אודיו מ-YouTube Music</li>
+  <li>אם הצלחה: העברת התמיכה ב-WARP ל-workflow ההפקה + תכנון טריגר schedule</li>
+  <li>אם כשלון: מעבר ל-runner ביתי (self-hosted) כפתרון מפלט ודאי</li>
 </ol>
 
 <h2>4. החלטות והנימוקים</h2>
 <table>
   <tr><th>החלטה</th><th>נימוק</th><th>חלופות שנדחו</th></tr>
   <tr>
-    <td>שכבה ראשית: yt-dlp + bgutil PO Token provider</td>
-    <td>בשליטה מלאה, ללא תלות בצד שלישי, תומך בכל הפורמטים</td>
-    <td>קוקיז של חשבון גוגל (נפסל על ידי המשתמש), OAuth ( YouTube חסמה את השיטה הזו entirely)</td>
+    <td>הכיוון הנוכחי: Cloudflare WARP בתוך GitHub Actions</td>
+    <td>חינם, ללא חשבון/טלפון, אינו משנה את ארכיטקטורת הפרויקט, מוכח בשימוש אמיתי בשרתי דאטה סנטר (בלוג arfevrier 2025, repo yt-dlp-rescue 2026)</td>
+    <td>פרוקסי חינמיים ציבוריים (לא יציבים, חסומים גם הם); פלטפורמות ענן אחרות (אותה בעיית IP דאטה סנטר)</td>
   </tr>
   <tr>
-    <td>שכבה שנייה: cobalt API בinstancות קהילתיות</td>
-    <td>API פשוט ללא טוקן, נבדק חייתית ועובד</td>
-    <td>Invidious (שרתי ה-API חסמו גישה ציבורית), Piped (השרתי מתים/חסומים)</td>
+    <td>תוכנית מפלט: runner ביתי (self-hosted)</td>
+    <td>IP רשת ביתית לא נחסם — ודאות גבוהה; דורש מחשב דולק + repo פרטי מסיבות אבטחה</td>
+    <td>נפסל כשלב ראשון כי דורש מהמשתמש תשתית והגבלות אבטחה</td>
+  </tr>
+  <tr>
+    <td>נטישת שיטת PO Token (bgutil)</td>
+    <td>הניסיון המעשי: לא הוריד YouTube Music ולא Shorts, ומה שהורד — באיכות נמוכה מאוד בלבד</td>
+    <td>השארת השיטה עם שיפורים (המשתמש החליט)</td>
+  </tr>
+  <tr>
+    <td>נטישת ארכיטקטורת Replit</td>
+    <td>Replit התחילה לאמת מספר טלפון — תנאי בל יעבור של המשתמש</td>
+    <td>isActive API של Replit נבדק חייתית וקיים (2026-11-01), אך חסר ערך עקב דרישת הטלפון</td>
+  </tr>
+  <tr>
+    <td>שכבה שנייה: cobalt בinstancות קהילתיות</td>
+    <td>נותרה כנפילה בסקריפט ללא שינוי</td>
+    <td>Invidious/Piped — שרתי מתים או חסומים</td>
   </tr>
 </table>
 
 <h2>5. ממצאים מאומתים</h2>
 <ul>
-  <li><span class="ok">מאומת 2026-10-30:</span> <code>co.otomir23.me</code> (cobalt instance) — עובד <b>ללא טוקן/Turnstile</b>.
-    נבדק חייתית עם הסרטון <code>GTgarjAw8b8</code>: החזיר tunnel URL תקין, הקובץ ירד במלואו (HTTP 200),
-    תמיכה ב-Shorts, וידאו 1080p h264, אודיו mp3, ו-<code>music.youtube.com</code>.</li>
-  <li><span class="ok">מאומת:</span> yt-dlp גרסה 2026.10-26 זמינה. YouTube מדרדרת אכיפת PO Token.
-    מ-wiki הרשמי: clients <code>tv_simply</code> / <code>web_embedded</code> / <code>android_vr</code> <b>לא דורשים PO Token</b> ל-GVS.
-    ה-client <code>mweb</code> דורש PO Token ל-GVS — אותו מספק plugin ה-bgutil.</li>
-  <li><span class="bad">נשלל:</span> instance הרשמי <code>api.cobalt.tools</code> — דורש Turnstile והסיר יוטיוב מרשימת השירותים.</li>
-  <li><span class="bad">נשלל:</span> Invidious — כל 4 השרתי API הציבוריים הגדולים החזירו 401/403.</li>
-  <li><span class="bad">נשלל:</span> Piped — שרתי מתים או מחזירים "Sign in to confirm you're not a bot".</li>
+  <li><span class="ok">מאומת 2026-11-01:</span> WARP עוקף חסימת YouTube משרתי דאטה סנטר —
+    ראיות: blog.arfevrier.fr (יולי 2025, שרתי Oracle) ו-repo CRtheHILLS/yt-dlp-rescue (מרץ 2026) —
+    שניהם מתעדים yt-dlp עובד דרכו. <b>לא נבדק עדיין בגיטאב אקשנס עצמו.</b></li>
+  <li><span class="ok">מאומת 2026-11-01:</span> הגרסאות העדכניות של הכלים: <code>wgcf v2.3.1</code>
+    ו-<code>wireproxy v1.1.3</code> — נבדקו מול GitHub API, הקבצים קיימים להורדה.
+    בארשייב של wireproxy קובץ בינארי יחיד <code>wireproxy</code>.</li>
+  <li><span class="ok">מאומת 2026-11-01:</span> <code>wireproxy</code> תומך בייבוא קונפיג WireGuard
+    בפורמט wg-quick (אותו פורמט ש-wgcf מייצר) ובקבוצות <code>[Socks5]</code> / <code>[http]</code>
+    — לפי README הרשמי. נבחר <code>[http]</code> כי yt-dlp תומך ב-proxy HTTP ללא תלות נוספת (pysocks).</li>
+  <li><span class="ok">מאומת 2026-11-01:</span> API של Replit קיים בפועל
+    (<code>replit.com/api/v1/repls</code> מחזיר 401/403 למפתח שגוי, 404 ללא אימות) — אך חסר ערך עקב אימות הטלפון.</li>
+  <li><span class="bad">נשלל 2026-11-01:</span> <code>api.replit.com/v1</code> — זהו Admin API ל-Enterprise فقط
+    (מפרט ה-OpenAPI שלו מצהיר: "Enterprise Account analytics and administration"), אינו מתאים למשתמש פרטי.</li>
+  <li><span class="bad">נשלל:</span> Invidious/Piped — 401/403 או "Sign in to confirm". instance
+    <code>api.cobalt.tools</code> — דורש Turnstile והסיר יוטיוב.</li>
 </ul>
 
 <h2>6. נבדקו ונשללו</h2>
 <ul>
-  <li>כ-40 instancות cobalt קהילתיות נוספות — כולן מתות או דורשות טוקן (נקבע ב-2026-10-30)</li>
-  <li>רשימות הקהילה instances.cobalt.best ו-cobalt.directory — לא נגישות</li>
+  <li>שיטת PO Token + bgutil — ניסוי משתמש: רק איכות נמוכה, YouTube Music ו-Shorts לא עובדו</li>
+  <li>ארכיטקטורת Replit (יצירת פרויקטים דרך API) — אימות טלפון ב-Replit (החלטת המשתמש 2026-11-01)</li>
+  <li>~40 instancות cobalt קהילתיות — מתות או דורשות טוקן (2026-10-30)</li>
   <li>y2mate / loader.to — לא יציבים, חסומים מ-IP דאטה סנטר</li>
+  <li>פלטפורמות ענן חלופיות — באותה בעיית IP דאטה סנטר כמו גיטאב (לא נחקרו בנפרד — מיותר)</li>
 </ul>
 
 <h2>7. בוצע עד כה</h2>
 <ul>
-  <li>2026-10-30: מחקר מקיף ובדיקות חיות של 3 גישות (cobalt / Invidious / Piped)</li>
-  <li>2026-10-30: כתיבת <code>scripts/download.sh</code> (2 שכבות)</li>
-  <li>2026-10-30: כתיבת <code>.github/workflows/test-download.yml</code> (3 בדיקות במקביל)</li>
-  <li>2026-10-30: הרצה ראשונה — 3 בדיקות נכשלו עם exit 127. גורם השורש: ה-workflow הריץ <code>./download.sh</code> במקום <code>scripts/download.sh</code>. תוקן + נוספה שורת <code>.gitattributes</code> לאכיפת LF + עדכון actions לגרסאות без Node 20</li>
-  <li>2026-10-30: הרצה שנייה — exit 1. אומת מול הקוד הרשמי של bgutil: צורת ההתקנה בסקריפט הייתה שגויה (אין <code>npm run build</code>; הפעלה היא <code>node build/main.js</code> אחרי <code>npx tsc</code>, וגם plugin ה-PyPI נדרש). תוקן</li>
-  <li>2026-10-30: הרצה שלישית — לוגים נחשפו: (1) שרת PO Token לא עלה; (2) cobalt החזיר <code>error.api.youtube.login</code> — ה-instance דורש כעת login ליוטיוב (change מאז הבדיקה המקומית). תוקן: כשל בשרת הטוקנים אינו עוצר עוד — yt-dlp ממשיך עם clients שאינם דורשים PO Token (tv_simply/android_vr/web_embedded), הלוגים מוצגים גלוי ב-Summary</li>
-  <li>2026-10-30: הרצה רביעית — 3 כשלים שונים זוהו מהלוגים הגלויים: (1) יומן שרת הטוקנים ריק — נתיב הלוג היה יחסי ולאחר cd נרשם לתיקייה לא קיימת; (2) שגיאת <code>height&lt;=max</code> — ערך האיכות max אינו ערך תקין ל-filter של yt-dlp; (3) cobalt <code>invalid_body</code> — נשלח <code>downloadMode:"video"</code> אבל הערך החוקי הוא <code>auto</code>. yt-dlp ללא טוקן נחסם ב-IP של Actions ("Sign in to confirm you're not a bot"). תוקן שלושתם</li>
-  <li>2026-10-30: הרצה חמישית — התקדמות: שרת PO Token <b>עלה בהצלחה</b>, ה-plug-in <b>נטען</b> (bgutil:http ברשימת הספקים). נמצאה שורה קריטית: <code>[jsc] JS Challenge Providers: node (unavailable)</code> — yt-dlp אינו מפעיל node אוטומטית לפתרון אתגרי JS. תוקן: נוסף <code>--js-runtimes node</code></li>
-  <li>2026-10-30: הרצה שישית — <b>הפריצה!</b> בדיקת "וידאו רגיל max" <b>הצליחה</b> — "Me at the zoo" ירד (742KB). מוכח: yt-dlp עובד מ-IP של Actions. ה-clients עברו לניסוי כל אחד בנפרד עם 15 שניות המתנה + 2 סבבים. cobalt החמיר: tunnel download נכשל גם הוא</li>
-  <li>2026-10-30: הרצה שביעית — "Me at the zoo" הצליח שוב (יציב), אך GTgarjAw8b8 נכשל בכל ה-clients. בדיקה מקומית של Innertube API: ANDROID_VR מחזיר LOGIN_REQUIRED לכולם (גם מרשת ביתית) — ה-client הזה מת. ממצא: שני הכשלים השתמשו ב-URLs של /shorts/ ו-music.youtube.com — paths שונים ב-extractor. תוקן: ה-script ממיר shorts/music URLs ל-www.youtube.com/watch + נוסף ניסיון web+PO Token</li>
+  <li>2026-10-30: מחקר cobalt/Invidious/Piped, כתיבת download.sh + test-download.yml, 7 הרצות עם תיקונים</li>
+  <li>2026-11-01: מחקר Replit API (קיים אך חסר ערך — אימות טלפון) — נפסל</li>
+  <li>2026-11-01: מחקר חלופות — נבחר כיוון Cloudflare WARP; אומתו גרסאות הכלים wgcf/wireproxy והיכולות שלהם</li>
+  <li>2026-11-01: תיקון באג קריטי ב-<code>scripts/download.sh</code> — כפילות שלמה של פונקציות
+    (try_cobalt, verify_output, בלוק ריצה) + קריאה לפונקציה לא קיימת <code>try_ytdlp</code> —
+    Script היה נופל ב-exit 1 גם אחרי הצלחה. 270 שורות → 175. גם הוסר קוד ה-PO Token המת
+    (start_po_server לא נקרא מעולם)</li>
+  <li>2026-11-01: הוספת תמיכת פרוקסי ל-download.sh (משתנה סביבה <code>YTDLP_PROXY</code>)</li>
+  <li>2026-11-01: כתיבת <code>.github/workflows/test-warp-download.yml</code> —
+    3 בדיקות במקביל, שלושה שלבים: הקמת WARP, בדיקת כתובת יציאה, הורדה דרכו</li>
+  <li>2026-11-01: ניקוי 8 קבצי מחקר זמניים משורש הפרויקט</li>
+  <li>2026-11-01: אימות תקינות — YAML נטען (8 שלבים), bash -n החזיר OK</li>
 </ul>
 
 <h2>8. אזהרות ומגבלות</h2>
 <ul>
-  <li><b>לא נבדק עדיין:</b> האם yt-dlp + PO Token עובד בפועל מ-IP של GitHub Actions — זה מטרת הבדיקה הקרובה</li>
-  <li><code>co.otomir23.me</code> הוא instance קהילתי בודד — עלול ליפול או להוסיף הגנות בכל רגע</li>
-  <li>אכיפת ה-PO Token של YouTube היא תחום מתעדכן — ייתכן שנידרש לעדכן parמטרי client בעתיד</li>
-  <li>אין עדיין טריגר schedule — הוחלט לדחות החלטה זו</li>
+  <li><b>לא נבדק עדיין:</b> האם WARP עובד בפועל מגיטאב אקשנס — זו מטרת ההרצה הקרובה</li>
+  <li>כתובות יציאה של WARP משותפות — יוטיוב עלול לחסום חלקן בעתיד (דיווחים מבודדים על חסימות זמניות)</li>
+  <li><code>wgcf</code> הוא כלי לא רשמי של Cloudflare — עשוי להפסיק לעבוד</li>
+  <li>ההורדה עלולה להפר את תנאי השירות של YouTube — באחריות המשתמש</li>
+  <li>אין עדיין טריגר schedule — הוחלט לדחות</li>
+  <li>הריפויטורי המקומי <b>לא</b> מכיל <code>.git</code> — ההעלאה לגיטאב מתבצעת ע"י המשתמש</li>
 </ul>
 
 <h2>9. מסמכים קשורים</h2>
 <ul>
   <li><a href="מדריך-מקוצר.html">מדריך מקוצר</a> — איך להריץ את הבדיקה</li>
-  <li><code>scripts/download.sh</code> — סקריפט ההורדה</li>
-  <li><code>.github/workflows/test-download.yml</code> — workflow הבדיקה</li>
+  <li><code>scripts/download.sh</code> — סקריפט ההורדה (עם תמיכת YTDLP_PROXY)</li>
+  <li><code>.github/workflows/test-warp-download.yml</code> — workflow הניסוי הנוכחי</li>
+  <li><code>.github/workflows/test-download.yml</code> — workflow הבדיקה הישן (ללא פרוקסי)</li>
 </ul>
 
 </body>
