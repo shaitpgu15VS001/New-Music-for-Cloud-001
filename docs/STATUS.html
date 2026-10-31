@@ -36,9 +36,11 @@
 <h2>3. פתוח כרגע</h2>
 <ol>
   <li>דחיפה ל-repo ב-Gitאב והרצת <code>test-download.yml</code> ידנית</li>
-  <li>בדיקת תוצאות: האם yt-dlp + PO Token עובד מ-IP של Actions</li>
+  <li>בדיקת תוצאות: האם yt-dlp עם client=android,web עובד מ-IP של Actions (ללא PO Token)</li>
   <li>בדיקת איכות הארטיפקט (1080p וידאו, mp3 אודיו)</li>
   <li>אחרי אישור — תכנון הטריגר (schedule) ושאר שלבי האוטומציה</li>
+</ol>
+<p class="warn"><b>שינוי מהותי:</b> הוספת שכבת yt-dlp עם <code>player_client=android,web</code> שמאומן ל-IPs של Data Center ללא תלות ב-PO Token. השיטה הישנה התבססה על bgutil PO Token שמאומן שלא עובד על IPs שכבר נחסמו.</p>
 </ol>
 
 <h2>4. החלטות והנימוקים</h2>

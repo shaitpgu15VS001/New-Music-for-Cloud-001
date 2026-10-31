@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # -----------------------------------------------------------------------------
-# download.sh — הורדה מיוטיוב / יוטיוב מיוזיק בשלוש שכבות גיבוי
+# download.sh — הורדה מיוטיוב / יוטיוב מיוזיק בשיטת client-first
+# תוכנן לעבודה מ-IPs של Data Center / GitHub Actions ללא PO Token
 #
 # שימוש:
 #   ./download.sh <url> [video|audio] [איכות: מספר או max, ברירת מחדל 1080]
 #
-# שכבה 1: yt-dlp + PO Token provider (bgutil) — ללא חשבון Google
-# שכבה 1b: yt-dlp עם clients שאינם דורשים PO Token כלל
-# שכבה 2: cobalt API ציבורי — אם השכבות הקודמות נכשלות
+# אסטרטגיה: ניסיון לקוחות yt-dlp שמאומןים לעבוד מ-DC IPs
+# 1. android,web — לקוחות עם זיהוי bot חלש, עובדים מ-DC IPs ללא PO Token
+# 2. שאר clients כאלטרנטיבה
+# שכבת נפילה: cobalt API — אם כל ה-clients כשלו
 #
 # הקבצים נשמרים בתיקיית ./downloads (ניתן לשנות במשתנה OUTPUT_DIR)
 # -----------------------------------------------------------------------------
@@ -19,7 +21,7 @@ QUALITY="${3:-1080}"        # מספר (1080, 720...) או max
 OUTPUT_DIR="${OUTPUT_DIR:-downloads}"
 
 # נרמול קישורי youtube: /shorts/ ו-music.youtube.com הולכים לנתיבים שונים ב-extractor
-# paths שנחסמים לעתים קרובות יותר מ-IP של דאטה סנטר — ממירים לצורת watch
+# paths שנחסמים לעתים קרובות יותר מ-IP של Data Center — ממירים לצורת watch
 if echo "$URL" | grep -qE "youtube\.com/shorts/"; then
   VID=$(echo "$URL" | grep -oE "shorts/[A-Za-z0-9_-]+" | cut -d/ -f2)
   [ -n "$VID" ] && URL="https://www.youtube.com/watch?v=$VID"
@@ -42,65 +44,44 @@ log()  { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" | tee -a "$LOG_FILE"; }
 fail() { log "✖ $*"; exit 1; }
 
 # -----------------------------------------------------------------------------
-# שכבה 1 — yt-dlp (+ PO Token אם השרת זמין)
+# שכבת yt-dlp עם player_client=android,web (מאומן ל-DC IPs)
 # -----------------------------------------------------------------------------
-try_ytdlp() {
-  log "שכבה 1: yt-dlp + PO Token provider"
+try_android_web() {
+  log "שכבת yt-dlp: player_client=android,web (מאומן ל-DC IPs, ללא PO Token)"
 
-  python3 -m pip install --quiet --upgrade "yt-dlp" "bgutil-ytdlp-pot-provider" >>"$LOG_FILE" 2>&1 \
-    || { log "התקנת yt-dlp / bgutil plugin נכשלה"; return 1; }
-
-  start_po_server
+  python3 -m pip install --quiet --upgrade "yt-dlp" >>"$LOG_FILE" 2>&1 \
+    || { log "התקנת yt-dlp נכשלה"; return 1; }
 
   local out_pattern="$OUTPUT_DIR/%(title)s [%(id)s].%(ext)s"
   local -a extra=()
   if [ "$MODE" = "audio" ]; then
-    extra+=(-x --audio-format mp3 --audio-quality 0)
+    # עבור אודיו: android client + best audio format
+    extra+=(-x --audio-format m4a --audio-quality 0)
+    # android client תומך ב-m4a ב-DC IPs
+    extra+=(-f "bv*+ba/m4a/b" --merge-output-format m4a)
   elif [ "$QUALITY" = "max" ]; then
-    # "max" אינו ערך תקין ל-filter של yt-dlp — משמיטים את סינון הגובה
-    extra+=(-f "bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/b" --merge-output-format mp4)
+    # "max" — משמיטים סינון גובה, מורידים את הזמין ביותר
+    extra+=(-f "bv*+ba/b" --merge-output-format mp4)
   else
     extra+=(-f "bv*[height<=${QUALITY}][ext=mp4]+ba[ext=m4a]/b[height<=${QUALITY}]/b" --merge-output-format mp4)
   fi
 
-  # ניסיון 1: mweb + PO Token — עם verbose כדי לראות אם ה-plug-in נטען
-  # --js-runtimes node: yt-dlp אינו מפעיל אוטומטית node לפתרון JS challenges,
-  # וללא פתרון אתגרים YouTube חוסם ("not a bot")
-  if [ "${PO_SERVER_UP:-0}" = "1" ]; then
-    local pot_client
-    for pot_client in mweb web; do
-      log "מנסה yt-dlp עם $pot_client + PO Token + node JS runtime"
-      if yt-dlp -v \
-          --js-runtimes node \
-          --extractor-args "youtube:player_client=$pot_client" \
-          --sleep-requests 2 \
-          --retries 3 \
-          "${extra[@]}" \
-          -o "$out_pattern" \
-          --no-playlist \
-          "$URL" >"$OUTPUT_DIR/ytdlp-verbose.log" 2>&1; then
-        tail -5 "$OUTPUT_DIR/ytdlp-verbose.log" | tee -a "$LOG_FILE"
-        return 0
-      fi
-      log "  ✖ $pot_client+PO Token: $(grep -m1 '^ERROR' "$OUTPUT_DIR/ytdlp-verbose.log" 2>/dev/null | cut -c1-120)"
-      sleep 10
-    done
-    log "שורות פוט-טוקן אחרונות מהלוג:"
-    grep -iE "\[pot|bgutil|potoken|po token|provider|jsc" "$OUTPUT_DIR/ytdlp-verbose.log" | tail -10 | tee -a "$LOG_FILE"
-  fi
-
-  # ניסיון 2: clients שאינם דורשים PO Token — כל אחד בנפרד, עם המתנה
-  # ביניהם: 3 מטריצות במקביל מאותה רשת עלולות להפעיל הגנת rate-limit של YouTube
+  # android + web — השילוב שמאומן לעבוד מ-Datacenter IPs
+  # android: זיהוי bot חלש, עובד מ-DC IPs
+  # web: פותח פורמטים נוספים אך דורש התאמה
+  local -a clients=("android" "web_embedded" "web")
   local pass client
+
   for pass in 1 2; do
-    for client in tv_simply android_vr web_embedded; do
+    for client in "${clients[@]}"; do
       log "מנסה yt-dlp עם client: $client (סבב $pass)"
-      sleep 15
+      sleep 20  # הארכה משמעותית: YouTube מאטל DC IPs בין נסיונות
+
       if yt-dlp \
           --js-runtimes node \
           --extractor-args "youtube:player_client=$client" \
-          --sleep-requests 3 \
-          --retries 3 \
+          --sleep-requests 5 \
+          --retries 5 \
           "${extra[@]}" \
           -o "$out_pattern" \
           --no-playlist \
@@ -113,9 +94,76 @@ try_ytdlp() {
     done
   done
 
-  log "yt-dlp נכשל בכל הניסיונות"
+  log "yt-dlp נכשל בכל נסיונות client android/web"
   return 1
 }
+
+# -----------------------------------------------------------------------------
+# שכבת נפילה: cobalt API
+# -----------------------------------------------------------------------------
+try_cobalt() {
+  log "שכבת 2: cobalt API"
+  # ל- cobalt ערכי downloadMode הם auto/audio/mute — "video" אינו ערך חוקי
+  local body
+  if [ "$MODE" = "audio" ]; then
+    body="{\"url\":\"$URL\",\"downloadMode\":\"audio\",\"audioFormat\":\"mp3\",\"audioBitrate\":\"320\"}"
+  elif [ "$QUALITY" = "max" ]; then
+    body="{\"url\":\"$URL\",\"downloadMode\":\"auto\",\"videoQuality\":\"max\"}"
+  else
+    body="{\"url\":\"$URL\",\"downloadMode\":\"auto\",\"videoQuality\":\"$QUALITY\"}"
+  fi
+  local host
+  for host in "${COBALT_HOSTS[@]}"; do
+    log "מנסה $host"
+    local resp
+    resp=$(curl -s --max-time 30 -X POST "$host/" \
+      -H "Accept: application/json" \
+      -H "Content-Type: application/json" \
+      -d "$body")
+
+    local status url
+    status=$(echo "$resp" | python3 -c "import sys,json;print(json.load(sys.stdin).get('status',''))" 2>/dev/null)
+    if [ "$status" != "tunnel" ] && [ "$status" != "redirect" ]; then
+      log "  ✖ תשובה: ${resp:0:200}"
+      continue
+    fi
+    url=$(echo "$resp" | python3 -c "import sys,json;print(json.load(sys.stdin)['url'])")
+    local fname
+    fname=$(echo "$resp" | python3 -c "import sys,json;print(json.load(sys.stdin).get('filename','video.mp4'))")
+
+    if curl -sL --max-time 300 -o "$OUTPUT_DIR/$fname" "$url" && [ -s "$OUTPUT_DIR/$fname" ]; then
+      log "  ✔ הורד: $fname ($(du -h "$OUTPUT_DIR/$fname" | cut -f1))"
+      return 0
+    fi
+    log "  ✖ הורדה מה-tunnel נכשלה"
+  done
+  return 1
+}
+
+# -----------------------------------------------------------------------------
+# בדיקת תקינות: הקובץ לא ריק וגדול מ-1KB
+# -----------------------------------------------------------------------------
+verify_output() {
+  local f
+  f=$(find "$OUTPUT_DIR" -type f -size +1k -mmin -30 ! -name "*.log" | head -1)
+  if [ -z "$f" ]; then
+    fail "לא נמצא קובץ פלט תקין"
+  fi
+  log "✔ הצליח! קובץ: $f ($(du -h "$f" | cut -f1))"
+}
+
+# -----------------------------------------------------------------------------
+# ריצה
+# -----------------------------------------------------------------------------
+log "מתחיל: $URL | מצב=$MODE | איכות=$QUALITY"
+
+# ניקוי שרת ה-PO Token בסיום
+trap '[ -f /tmp/bgutil.pid ] && kill "$(cat /tmp/bgutil.pid)" 2>/dev/null' EXIT
+
+# ניסיון ראשון: yt-dlp עם android/web client (ללא PO Token, מותאם ל-DC IPs)
+try_android_web || try_cobalt || fail "כל השכבות נכשלו"
+
+verify_output
 
 # -----------------------------------------------------------------------------
 # הקמת שרת PO Token — best effort
