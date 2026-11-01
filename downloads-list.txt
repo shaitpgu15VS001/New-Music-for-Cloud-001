@@ -7,3 +7,5 @@
 # דוגמאות (הסירו את ה-# כדי להפעיל):
 # https://www.youtube.com/watch?v=dQw4w9WgXcQ video 1080
 # https://music.youtube.com/watch?v=XXXXXXX audio 320
+https://www.youtube.com/watch?v=MCcoNr_GaiU video 1080
+https://music.youtube.com/watch?v=bNpTG31hVEM&si=nm4a3o0aXkRJs8hK audio 320
