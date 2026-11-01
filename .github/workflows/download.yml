@@ -1,0 +1,264 @@
+name: הורדת יוטיוב (הפקה)
+
+# workflow קבוע: מעבד את downloads-list.txt (ותמיד אפשר להוסיף קישור ידני בהרצה).
+# כל פריט ברשימה הופך ל-job נפרד עם Cloudflare WARP + לולאת סיבוב IP
+# (מוכחים ב-test-warp-download, ריצה #5: 5/5).
+# טריגר schedule יומי מטפל ברשימה שנותרה; מומלץ למחוק שורה אחרי הורדה מוצלחת.
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "קישור נוסף לעיבוד (נוסף על הרשימה)"
+        required: false
+        default: ""
+      mode:
+        description: "מצב עבור הקישור הנוסף: video / audio"
+        required: false
+        default: ""
+      quality:
+        description: "איכות עבור הקישור הנוסף (מספר או max)"
+        required: false
+        default: ""
+  schedule:
+    - cron: "0 3 * * *"   # כל יום ב-03:00 UTC (05:00 שעון ישראל)
+
+jobs:
+  queue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      count: ${{ steps.build.outputs.count }}
+      matrix: ${{ steps.build.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: בניית תור ההורדות
+        id: build
+        env:
+          INPUT_URL: ${{ inputs.url }}
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_QUALITY: ${{ inputs.quality }}
+        run: |
+          python3 - <<'EOF'
+          import json, os, re
+
+          entries = []
+          seen = set()
+
+          def add(url, mode="", quality=""):
+              url = url.strip()
+              if not url or url.startswith("#") or url in seen:
+                  return
+              seen.add(url)
+              m = re.search(r'(?:v=|shorts/|youtu\.be/)([\w-]{6,})', url)
+              vid = m.group(1) if m else str(len(entries) + 1)
+              entries.append({
+                  "name": f"{vid} {mode or 'video'}",
+                  "url": url,
+                  "mode": mode or "video",
+                  "quality": quality or "1080",
+              })
+
+          try:
+              for line in open("downloads-list.txt", encoding="utf-8"):
+                  parts = line.split("#", 1)[0].split()
+                  if parts:
+                      add(parts[0],
+                          parts[1] if len(parts) > 1 else "",
+                          parts[2] if len(parts) > 2 else "")
+          except FileNotFoundError:
+              pass
+
+          add(os.environ.get("INPUT_URL", ""),
+              os.environ.get("INPUT_MODE", ""),
+              os.environ.get("INPUT_QUALITY", ""))
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+              f.write(f"count={len(entries)}\n")
+              f.write("matrix=" + json.dumps(entries, ensure_ascii=False) + "\n")
+          EOF
+
+          count=$(grep -m1 '^count=' "$GITHUB_OUTPUT" | cut -d= -f2)
+          if [ "${count:-0}" = "0" ]; then
+            echo "הרשימה ריקה — אין מה להוריד הפעם." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## תור ההורדות ($count פריטים)" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            grep '^matrix=' "$GITHUB_OUTPUT" | cut -d= -f2- | python3 -c "
+          import json, sys
+          for e in json.loads(sys.stdin.read()):
+              print(e['url'], '|', e['mode'], '|', e['quality'])
+          " >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  download:
+    needs: queue
+    if: needs.queue.outputs.count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.queue.outputs.matrix) }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      # --- הקמת proxy חינמי של Cloudflare WARP --------------------------------
+      - name: הקמת Cloudflare WARP כ-proxy מקומי
+        run: |
+          set -euo pipefail
+          mkdir -p warp
+          cd warp
+
+          echo "::group::הורדת wgcf ויצירת חשבון WARP"
+          curl -fsSL -o wgcf https://github.com/ViRb3/wgcf/releases/download/v2.3.1/wgcf_2.3.1_linux_amd64
+          chmod +x wgcf
+          ./wgcf register --accept-tos
+          ./wgcf generate
+          echo "::endgroup::"
+
+          echo "::group::הורדת wireproxy"
+          curl -fsSL -o wireproxy.tgz https://github.com/windtf/wireproxy/releases/download/v1.1.3/wireproxy_linux_amd64.tar.gz
+          tar -xzf wireproxy.tgz
+          echo "::endgroup::"
+
+          printf '\n[http]\nBindAddress = 127.0.0.1:1080\n' >> wgcf-profile.conf
+
+          start_proxy() {
+            pkill -f 'wireproxy -c' 2>/dev/null || true
+            sleep 1
+            nohup ./wireproxy -c wgcf-profile.conf > wireproxy.log 2>&1 &
+            echo $! > wireproxy.pid
+          }
+          wait_proxy() {
+            local i
+            for i in $(seq 1 30); do
+              sleep 2
+              if curl -fsS --max-time 5 -x http://127.0.0.1:1080 \
+                   https://www.cloudflare.com/cdn-cgi/trace -o /dev/null 2>/dev/null; then
+                echo "ה-proxy עלה אחרי $((i * 2)) שניות"
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          start_proxy
+          if ! wait_proxy; then
+            echo "::warning::ה-proxy לא עלה בניסיון הראשון — מפעיל מחדש"
+            start_proxy
+            if ! wait_proxy; then
+              echo "::error::ה-proxy לא עלה תוך 60 שניות (שניים ניסיונות)"
+              {
+                echo '### wireproxy.log'
+                echo '```'
+                cat wireproxy.log
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+              cat wireproxy.log >&2
+              exit 1
+            fi
+          fi
+
+      # --- בדיקת WARP ----------------------------------------------------------
+      - name: בדיקת WARP — האם כתובת היציאה השתנתה
+        run: |
+          set -euo pipefail
+          cd warp
+          direct_ip=$(curl -fsS --max-time 10 https://www.cloudflare.com/cdn-cgi/trace \
+                        | grep '^ip=' | cut -d= -f2)
+          trace=$(curl -fsS --max-time 15 -x http://127.0.0.1:1080 \
+                    https://www.cloudflare.com/cdn-cgi/trace)
+          warp_ip=$(echo "$trace" | grep '^ip=' | cut -d= -f2)
+          warp_status=$(echo "$trace" | grep '^warp=' | cut -d= -f2)
+
+          {
+            echo "## בדיקת WARP — ${{ matrix.name }}"
+            echo ""
+            echo "| מדד | ערך |"
+            echo "|------|------|"
+            echo "| IP ישיר של ה-runner | \`$direct_ip\` |"
+            echo "| IP דרך הפרוקסי | \`$warp_ip\` |"
+            echo "| warp | \`$warp_status\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -z "$warp_ip" ] || [ "$warp_ip" = "$direct_ip" ]; then
+            echo "::error::התעבורה לא עוברת דרך הפרוקסי (הכתובת לא השתנתה)"
+            exit 1
+          fi
+          echo "✔ כתובת היציאה השתנתה — התעבורה עוברת בפרוקסי"
+
+      # --- הורדה עם סיבוב IP אוטומטי ------------------------------------------
+      - name: הרצת סקריפט ההורדה דרך הפרוקסי
+        env:
+          OUTPUT_DIR: downloads
+          YTDLP_PROXY: "http://127.0.0.1:1080"
+          MATRIX_URL: ${{ matrix.url }}
+          MATRIX_MODE: ${{ matrix.mode }}
+          MATRIX_QUALITY: ${{ matrix.quality }}
+        run: |
+          chmod +x scripts/download.sh scripts/warp-rotate.sh
+          url="$MATRIX_URL"
+          mode="$MATRIX_MODE"
+          quality="$MATRIX_QUALITY"
+
+          for attempt in 1 2 3; do
+            # ניקוי הלוג לפני כל נסיון — ה-grep למטה בודק רק כשלון נוכחי
+            rm -f downloads/download.log
+            if bash scripts/download.sh "$url" "$mode" "$quality"; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ] \
+               && grep -q "Sign in to confirm" downloads/download.log 2>/dev/null; then
+              echo "::warning::ניסיון $attempt: חסימת bot — מסובב כתובת WARP"
+              bash scripts/warp-rotate.sh warp || exit 1
+            else
+              break
+            fi
+          done
+          exit 1
+
+      - name: סיכום תוצאות
+        if: always()
+        run: |
+          echo "## תוצאות: ${{ matrix.name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f downloads/.download-ok ]; then
+            echo "| קובץ | גודל |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|-------|------|" >> "$GITHUB_STEP_SUMMARY"
+            find downloads -type f -size +1k ! -name "*.log" -printf "| %f | %s bytes |\n" >> "$GITHUB_STEP_SUMMARY"
+            echo "✅ **הצליח**" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ **נכשל** — הלוגים למטה" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo '### לוג ההורדה (30 שורות אחרונות)' >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -30 downloads/download.log 2>/dev/null >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            if [ -f downloads/ytdlp-verbose.log ]; then
+              echo '### לוג yt-dlp (30 שורות אחרונות)' >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              tail -30 downloads/ytdlp-verbose.log >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+
+      - name: העלאת הקבצים כ-Artifact
+        uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: "download-${{ strategy.job-index }}"
+          path: downloads/
+          retention-days: 30
+          if-no-files-found: warn
