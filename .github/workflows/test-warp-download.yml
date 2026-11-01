@@ -176,7 +176,9 @@ jobs:
         run: |
           echo "## תוצאות: ${{ matrix.name }}" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          if [ -d downloads ] && find downloads -type f -size +1k ! -name "*.log" | grep -q .; then
+          # מקור האמת: קובץ הדגל .download-ok שנכתב ע"י הסקריפט רק בהצלחה מלאה
+          # (בדיקה לפי "קיים קובץ" גרמה ל-✅ שקרי באודיו — mp4 שנשאר אחרי כשלון המרה)
+          if [ -f downloads/.download-ok ]; then
             echo "| קובץ | גודל |" >> "$GITHUB_STEP_SUMMARY"
             echo "|-------|------|" >> "$GITHUB_STEP_SUMMARY"
             find downloads -type f -size +1k ! -name "*.log" -printf "| %f | %s bytes |\n" >> "$GITHUB_STEP_SUMMARY"
@@ -192,6 +194,12 @@ jobs:
               echo '### לוג yt-dlp (30 שורות אחרונות)' >> "$GITHUB_STEP_SUMMARY"
               echo '```' >> "$GITHUB_STEP_SUMMARY"
               tail -30 downloads/ytdlp-verbose.log >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+            fi
+            if [ -f downloads/ffmpeg-check.log ]; then
+              echo '### ffmpeg' >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              cat downloads/ffmpeg-check.log >> "$GITHUB_STEP_SUMMARY"
               echo '```' >> "$GITHUB_STEP_SUMMARY"
             fi
           fi

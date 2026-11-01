@@ -156,21 +156,65 @@ try_cobalt() {
 }
 
 # -----------------------------------------------------------------------------
-# בדיקת תקינות: הקובץ לא ריק וגדול מ-1KB
+# בדיקת תקינות: הקובץ קיים, גדול מ-1KB, ותואם את הסיומת הצפויה למצב
+# بدون בדיקת סיומת — קובץ mp4 הורדה נחשב ל"הצלחה" של מצב אודיו (באג מ-2026-11-01)
 # -----------------------------------------------------------------------------
 verify_output() {
-  local f
-  f=$(find "$OUTPUT_DIR" -type f -size +1k -mmin -30 ! -name "*.log" | head -1)
-  if [ -z "$f" ]; then
-    fail "לא נמצא קובץ פלט תקין"
+  local -a exts
+  local f e
+  if [ "$MODE" = "audio" ]; then
+    # רק סיומות אודיו מדויקות: mp3 (_QUALITY מספרי) או m4a (אחרת).
+    # webm/mkv אסור כאן — עלולים להיות وידאו שנותר מ-fallback "b" (באג ה-✅ השווא)
+    exts=(mp3 m4a)
+  else
+    exts=(mp4 mkv webm)
   fi
+  f=""
+  for e in "${exts[@]}"; do
+    f=$(find "$OUTPUT_DIR" -type f -size +1k -mmin -30 ! -name "*.log" -iname "*.$e" 2>/dev/null | head -1)
+    [ -n "$f" ] && break
+  done
+  if [ -z "$f" ]; then
+    fail "לא נמצא קובץ פלט תקין (סיומות מצופות: ${exts[*]})"
+  fi
+  # דגל הצלחה — מקור האמת היחיד של ה-workflow (לא "קיים קובץ")
+  : > "$OUTPUT_DIR/.download-ok"
   log "✔ הצליח! קובץ: $f ($(du -h "$f" | cut -f1))"
+}
+
+# -----------------------------------------------------------------------------
+# בדיקת ffmpeg — חובה להמרת אודיו ולמיזוג וידאו+nפרד
+# runner עלול לא לכלול אותו; התקנה עצמית אם חסר
+# -----------------------------------------------------------------------------
+ensure_ffmpeg() {
+  local chk="$OUTPUT_DIR/ffmpeg-check.log"
+  if command -v ffmpeg >/dev/null 2>&1; then
+    ffmpeg -version 2>/dev/null | head -3 > "$chk"
+    log "ffmpeg: $(head -1 "$chk" | cut -c1-70)"
+    return 0
+  fi
+  echo "ffmpeg לא היה מותקן ב-runner" > "$chk"
+  log "⚠ ffmpeg לא נמצא — מתקין..."
+  if command -v apt-get >/dev/null 2>&1; then
+    (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg) >>"$LOG_FILE" 2>&1 || true
+  fi
+  if command -v ffmpeg >/dev/null 2>&1; then
+    ffmpeg -version 2>/dev/null | head -3 >> "$chk"
+    log "✔ ffmpeg הותקן בהצלחה"
+    return 0
+  fi
+  echo "ההתקנה נכשלה — פורמטים שדורשים המרה/מיזוג ייכשלו" >> "$chk"
+  log "⚠ ffmpeg עדיין חסר — פורמטים שדורשים המרה/מיזוג עלולים להיכשל"
+  return 0
 }
 
 # -----------------------------------------------------------------------------
 # ריצה
 # -----------------------------------------------------------------------------
 log "מתחיל: $URL | מצב=$MODE | איכות=$QUALITY"
+
+# וידוא ש-ffmpeg זמין (המרת אודיו, מיזוג וידאו+nפרד)
+ensure_ffmpeg
 
 # ניסיון ראשון: yt-dlp עם android/web client (ללא PO Token, מותאם ל-DC IPs)
 try_android_web || try_cobalt || fail "כל השכבות נכשלו"

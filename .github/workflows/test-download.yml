@@ -79,7 +79,8 @@ jobs:
         run: |
           echo "## תוצאות: ${{ matrix.name }}" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          if [ -d downloads ] && find downloads -type f -size +1k ! -name "*.log" | grep -q .; then
+          # מקור האמת: קובץ הדגל .download-ok שנכתב ע"י הסקריפט רק בהצלחה מלאה
+          if [ -f downloads/.download-ok ]; then
             echo "| קובץ | גודל |" >> "$GITHUB_STEP_SUMMARY"
             echo "|-------|------|" >> "$GITHUB_STEP_SUMMARY"
             find downloads -type f -size +1k ! -name "*.log" -printf "| %f | %s bytes |\n" >> "$GITHUB_STEP_SUMMARY"
@@ -91,16 +92,16 @@ jobs:
             echo '```' >> "$GITHUB_STEP_SUMMARY"
             tail -30 downloads/download.log 2>/dev/null >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
-            if ls downloads/download.log.bgutil >/dev/null 2>&1; then
-              echo '### לוג שרת PO Token (20 שורות אחרונות)' >> "$GITHUB_STEP_SUMMARY"
+            if [ -f downloads/ytdlp-verbose.log ]; then
+              echo '### לוג yt-dlp (30 שורות אחרונות)' >> "$GITHUB_STEP_SUMMARY"
               echo '```' >> "$GITHUB_STEP_SUMMARY"
-              tail -20 downloads/download.log.bgutil >> "$GITHUB_STEP_SUMMARY"
+              tail -30 downloads/ytdlp-verbose.log >> "$GITHUB_STEP_SUMMARY"
               echo '```' >> "$GITHUB_STEP_SUMMARY"
             fi
-            if ls downloads/ytdlp-verbose.log >/dev/null 2>&1; then
-              echo '### שורות PO Token מ-youtube (verbose)' >> "$GITHUB_STEP_SUMMARY"
+            if [ -f downloads/ffmpeg-check.log ]; then
+              echo '### ffmpeg' >> "$GITHUB_STEP_SUMMARY"
               echo '```' >> "$GITHUB_STEP_SUMMARY"
-              grep -iE '\[pot|bgutil|potoken|po token|provider' downloads/ytdlp-verbose.log | tail -25 >> "$GITHUB_STEP_SUMMARY"
+              cat downloads/ffmpeg-check.log >> "$GITHUB_STEP_SUMMARY"
               echo '```' >> "$GITHUB_STEP_SUMMARY"
             fi
           fi
