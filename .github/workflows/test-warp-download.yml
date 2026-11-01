@@ -155,6 +155,10 @@ jobs:
           echo "✔ כתובת היציאה השתנתה — התעבורה עוברת בפרוקסי"
 
       # --- שלב 3: הורדה דרך הפרוקסי -----------------------------------------
+      # --- שלב 3: הורדה דרך הפרוקסי עם סיבוב IP אוטומטי ---------------------
+      # חסימת "Sign in to confirm" היא per-IP: אם הורדה נכשלה בסוג חסימה זה,
+      # מסובבים לכתובת WARP חדשה (רישום חשבון חדש) ומנסים שוב — עד 3 סבבים.
+      # כשלונים אחרים (רשת, באגים) לא מסובבים IP — לא יעזור.
       - name: הרצת סקריפט ההורדה דרך הפרוקסי
         env:
           OUTPUT_DIR: downloads
@@ -166,10 +170,28 @@ jobs:
           MATRIX_MODE: ${{ matrix.mode }}
           MATRIX_QUALITY: ${{ matrix.quality }}
         run: |
-          chmod +x scripts/download.sh
-          bash scripts/download.sh "${INPUT_URL:-$MATRIX_URL}" \
-                        "${INPUT_MODE:-$MATRIX_MODE}" \
-                        "${INPUT_QUALITY:-$MATRIX_QUALITY}"
+          chmod +x scripts/download.sh scripts/warp-rotate.sh
+          url="${INPUT_URL:-$MATRIX_URL}"
+          mode="${INPUT_MODE:-$MATRIX_MODE}"
+          quality="${INPUT_QUALITY:-$MATRIX_QUALITY}"
+
+          for attempt in 1 2 3; do
+            # ניקוי הלוג לפני כל נסיון — ה-grep למטה בודק רק כשלון נוכחי
+            # (הלוג נצבר ע"י tee -a ולא נמחק בין נסיונות)
+            rm -f downloads/download.log
+            if bash scripts/download.sh "$url" "$mode" "$quality"; then
+              exit 0
+            fi
+            # האם הכשלון הוא חסימת bot? (הסיבה היחידה שסיבוב IP מטפל בה)
+            if [ "$attempt" -lt 3 ] \
+               && grep -q "Sign in to confirm" downloads/download.log 2>/dev/null; then
+              echo "::warning::ניסיון $attempt: חסימת bot — מסובב כתובת WARP"
+              bash scripts/warp-rotate.sh warp || exit 1
+            else
+              break
+            fi
+          done
+          exit 1
 
       - name: סיכום תוצאות
         if: always()
