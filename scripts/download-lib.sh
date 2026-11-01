@@ -142,7 +142,11 @@ ensure_ffmpeg() {
   echo "ffmpeg לא היה מותקן ב-runner" > "$chk"
   log "⚠ ffmpeg לא נמצא — מתקין..."
   if command -v apt-get >/dev/null 2>&1; then
-    (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg) >>"$LOG_FILE" 2>&1 || true
+    # תחילה בלי apt-get update — רשימות החבילות כבר קיימות בתמונת ה-runner;
+    # רק אם ההתקנה נופלת — מעדכן רשימות ומתקין שוב (fallback מלא)
+    (sudo apt-get install -y -qq ffmpeg) >>"$LOG_FILE" 2>&1 \
+      || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg) >>"$LOG_FILE" 2>&1 \
+      || true
   fi
   if command -v ffmpeg >/dev/null 2>&1; then
     ffmpeg -version 2>/dev/null | head -3 >> "$chk"

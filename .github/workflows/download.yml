@@ -106,10 +106,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v5
-        with:
-          node-version: "22"
-
+      # setup-node לא נחוץ: node מותקן מראש בתמונת ה-runner (22/24)
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -267,3 +264,5 @@ jobs:
           path: downloads/
           retention-days: 30
           if-no-files-found: warn
+          # קובצי מדיה כבר דחוסים — רמת 0 חוסכת דחיסה חוזרת ומאיצה את ההעלאה
+          compression-level: 0

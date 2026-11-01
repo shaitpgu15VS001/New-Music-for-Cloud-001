@@ -55,7 +55,7 @@ source "$SCRIPT_DIR/download-lib.sh"
 try_android_web() {
   log "שכבת yt-dlp: player_client=visionos,web,tv,ios,android,web_embedded (visionos עוקף SABR)"
 
-  python3 -m pip install --quiet --upgrade "yt-dlp" >>"$LOG_FILE" 2>&1 \
+  python3 -m pip install --quiet --upgrade --disable-pip-version-check "yt-dlp" >>"$LOG_FILE" 2>&1 \
     || { log "התקנת yt-dlp נכשלה"; return 1; }
 
   local out_pattern="$OUTPUT_DIR/%(title)s [%(id)s].%(ext)s"
@@ -106,15 +106,19 @@ try_android_web() {
   # הרצה: run_attempts <תווית> <מס' סבבים> <פרמטרי yt-dlp...>
   run_attempts() {
     local label="$1" passes="$2"; shift 2
-    local pass client
+    local pass client first=1
     for ((pass=1; pass<=passes; pass++)); do
       for client in "${clients[@]}"; do
         log "מנסה yt-dlp [$label] client: $client (סבב $pass)"
-        sleep 20  # הארכה משמעותית: YouTube מאטל DC IPs בין נסיונות
+        # המתנה רק בין נסיונות (YouTube מאטל DC IPs); הנסיון הראשון מתחיל מיד
+        if [ "$first" -eq 0 ]; then
+          sleep 20
+        fi
+        first=0
         if yt-dlp \
             --js-runtimes node \
             --extractor-args "youtube:player_client=$client" \
-            --sleep-requests 5 \
+            --sleep-requests 2 \
             --retries 5 \
             --force-ipv4 \
             "${proxy_args[@]}" \
