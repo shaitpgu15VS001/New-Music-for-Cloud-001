@@ -61,10 +61,14 @@ try_android_web() {
   local out_pattern="$OUTPUT_DIR/%(title)s [%(id)s].%(ext)s"
   local -a extra=()
   if [ "$MODE" = "audio" ]; then
-    # עבור אודיו: android client + best audio format
-    extra+=(-x --audio-format m4a --audio-quality 0)
-    # android client תומך ב-m4a ב-DC IPs
-    extra+=(-f "bv*+ba/m4a/b" --merge-output-format m4a)
+    # אודיו בלבד: --merge-output-format הוא ערך מכולה (mp4/mkv/webm) בלבד
+    # ודחיית m4a ממנו גרמה לכשלון מוחלט בעבר — ההמרה נעשית ע"י ffmpeg אחרי ההורדה.
+    # QUALITY عددית וסבירה (עד 512) = ביטрейט mp3 מבוקש, אחרת m4a.
+    if echo "$QUALITY" | grep -qE '^[0-9]+$' && [ "$QUALITY" -le 512 ]; then
+      extra+=(-f "ba/b" -x --audio-format mp3 --audio-quality "${QUALITY}K")
+    else
+      extra+=(-f "ba/b" -x --audio-format m4a)
+    fi
   elif [ "$QUALITY" = "max" ]; then
     # "max" — משמיטים סינון גובה, מורידים את הזמין ביותר
     extra+=(-f "bv*+ba/b" --merge-output-format mp4)
@@ -101,7 +105,7 @@ try_android_web() {
         tail -3 "$OUTPUT_DIR/ytdlp-verbose.log" | tee -a "$LOG_FILE"
         return 0
       fi
-      log "  ✖ $client: $(grep -m1 '^ERROR' "$OUTPUT_DIR/ytdlp-verbose.log" 2>/dev/null | cut -c1-120)"
+      log "  ✖ $client: $(grep -m1 -iE '^(ERROR|yt-dlp: error)' "$OUTPUT_DIR/ytdlp-verbose.log" 2>/dev/null | cut -c1-140)"
     done
   done
 

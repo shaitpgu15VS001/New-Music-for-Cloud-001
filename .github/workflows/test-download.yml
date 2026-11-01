@@ -23,7 +23,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # שלוש בדיקות במקביל: shorts וידאו, וידאו רגיל, אודיו
+        # 5 בדיקות במקביל — זהה ל-workflow של WARP להשוואה הוגנת:
+        # shorts וידאו, וידאו רגיל, אודיו מ-YouTube Music, ושני סרטוני VEVO
+        # ב-1080p לבדיקת "האם ה-IP של GitHub חסום" על סרטונים נפוצים
         include:
           - name: "Shorts וידאו 1080p"
             url: "https://www.youtube.com/shorts/GTgarjAw8b8"
@@ -37,6 +39,14 @@ jobs:
             url: "https://music.youtube.com/watch?v=GTgarjAw8b8"
             mode: audio
             quality: "320"
+          - name: "VEVO קלאסיקה 1080p"
+            url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+            mode: video
+            quality: "1080"
+          - name: "VEVO פופ עולמי 1080p"
+            url: "https://www.youtube.com/watch?v=kJQP7kiw5Fk"
+            mode: video
+            quality: "1080"
 
     steps:
       - uses: actions/checkout@v5

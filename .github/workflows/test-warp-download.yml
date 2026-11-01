@@ -28,7 +28,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # שלוש בדיקות במקביל: shorts וידאו, וידאו רגיל, אודיו מ-YouTube Music
+        # 5 בדיקות במקביל — זהה ל-workflow test-download.yml להשוואה הוגנת:
+        # shorts וידאו, וידאו רגיל, אודיו מ-YouTube Music, ושני סרטוני VEVO
         include:
           - name: "Shorts וידאו 1080p"
             url: "https://www.youtube.com/shorts/GTgarjAw8b8"
@@ -42,6 +43,14 @@ jobs:
             url: "https://music.youtube.com/watch?v=GTgarjAw8b8"
             mode: audio
             quality: "320"
+          - name: "VEVO קלאסיקה 1080p"
+            url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+            mode: video
+            quality: "1080"
+          - name: "VEVO פופ עולמי 1080p"
+            url: "https://www.youtube.com/watch?v=kJQP7kiw5Fk"
+            mode: video
+            quality: "1080"
 
     steps:
       - uses: actions/checkout@v5
@@ -79,23 +88,42 @@ jobs:
           # הוספת שכבת proxy HTTP לפרופיל ה-WireGuard שהופק ע"י wgcf
           printf '\n[http]\nBindAddress = 127.0.0.1:1080\n' >> wgcf-profile.conf
 
-          # הפעלה ברקע + המתנה לעליית ה-proxy (עד 30 שניות)
-          nohup ./wireproxy -c wgcf-profile.conf > wireproxy.log 2>&1 &
-          echo $! > wireproxy.pid
-          up=0
-          for i in $(seq 1 15); do
-            sleep 2
-            if curl -fsS --max-time 5 -x http://127.0.0.1:1080 \
-                 https://www.cloudflare.com/cdn-cgi/trace -o /dev/null 2>/dev/null; then
-              up=1
-              echo "ה-proxy עלה אחרי $((i * 2)) שניות"
-              break
+          # הפעלה ברקע + המתנה לעליית ה-proxy — עד 60 שניות, ואם לא עלה:
+          # ניסיון הפעלה חוזר אחד (wireproxy עלול לעלות לאט בחלק מהרצות)
+          start_proxy() {
+            pkill -f 'wireproxy -c' 2>/dev/null || true
+            sleep 1
+            nohup ./wireproxy -c wgcf-profile.conf > wireproxy.log 2>&1 &
+            echo $! > wireproxy.pid
+          }
+          wait_proxy() {
+            local i
+            for i in $(seq 1 30); do
+              sleep 2
+              if curl -fsS --max-time 5 -x http://127.0.0.1:1080 \
+                   https://www.cloudflare.com/cdn-cgi/trace -o /dev/null 2>/dev/null; then
+                echo "ה-proxy עלה אחרי $((i * 2)) שניות"
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          start_proxy
+          if ! wait_proxy; then
+            echo "::warning::ה-proxy לא עלה בניסיון הראשון — מפעיל מחדש"
+            start_proxy
+            if ! wait_proxy; then
+              echo "::error::ה-proxy לא עלה תוך 60 שניות (שניים ניסיונות)"
+              {
+                echo '### wireproxy.log'
+                echo '```'
+                cat wireproxy.log
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+              cat wireproxy.log >&2
+              exit 1
             fi
-          done
-          if [ "$up" != "1" ]; then
-            echo "::error::ה-proxy לא עלה תוך 30 שניות"
-            cat wireproxy.log >&2
-            exit 1
           fi
 
       # --- שלב 2: וידוא שהתעבורה באמת יוצאת דרך WARP ------------------------
