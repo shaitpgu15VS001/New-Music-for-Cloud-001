@@ -83,7 +83,12 @@ jobs:
           if [ -f downloads/.download-ok ]; then
             echo "| קובץ | גודל |" >> "$GITHUB_STEP_SUMMARY"
             echo "|-------|------|" >> "$GITHUB_STEP_SUMMARY"
-            find downloads -type f -size +1k ! -name "*.log" -printf "| %f | %s bytes |\n" >> "$GITHUB_STEP_SUMMARY"
+            find downloads -type f -size +1k ! -name "*.log" ! -name "quality.txt" -printf "| %f | %s bytes |\n" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            if [ -f downloads/quality.txt ]; then
+              echo "**איכות בפועל:** $(cat downloads/quality.txt)" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+            fi
             echo "✅ **הצליח**" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "❌ **נכשל** — הלוגים למטה" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>הורדה מיוטיוב — מדריך מורחב</title>
+<style>
+  body { font-family: "Segoe UI", Tahoma, sans-serif; font-size: 16px; line-height: 1.7;
+         background: #f8f9fa; color: #212529; max-width: 80ch; margin: 2rem auto; padding: 0 1rem; }
+  h1 { color: #0d6efd; border-bottom: 2px solid #0d6efd; padding-bottom: .5rem; }
+  h2 { color: #198754; margin-top: 2.2rem; border-right: 4px solid #198754; padding-right: .6rem; }
+  h3 { color: #0d6efd; margin-top: 1.5rem; }
+  code { background: #e9ecef; padding: .1rem .3rem; border-radius: 3px; direction: ltr; unicode-bidi: embed; }
+  pre { background: #212529; color: #f8f9fa; padding: 1rem; border-radius: 6px;
+        overflow-x: auto; direction: ltr; text-align: left; font-size: .9rem; }
+  pre code { background: none; color: inherit; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid #dee2e6; padding: .5rem .7rem; text-align: right; }
+  th { background: #e9ecef; }
+  ul, ol { padding-right: 1.5rem; }
+  li { margin-bottom: .4rem; }
+  .tip { background: #d1e7dd; border-right: 4px solid #198754; padding: .7rem 1rem; margin: 1rem 0; }
+  .warn { background: #fff3cd; border-right: 4px solid #fd7e14; padding: .7rem 1rem; margin: 1rem 0; }
+  .bad { background: #f8d7da; border-right: 4px solid #dc3545; padding: .7rem 1rem; margin: 1rem 0; }
+</style>
+</head>
+<body>
+
+<h1>הורדה מיוטיוב — מדריך מורחב</h1>
+<p>מדריך זה מסביר את כל האפשרויות של הפרויקט: שימוש מקומית, הרצה דרך GitHub Actions,
+רשימת הורדות, בחירת איכות, פתרון תקלות, שאלות נפוצות ומגבלות ידועות.
+לשימוש קצר ומהיר — ראו <a href="מדריך-מקוצר.html">המדריך המקוצר</a>.</p>
+
+<h2>1. מה הפרויקט עושה</h2>
+<p>סקריפט הורדה מיוטיוב, יוטיוב מיוזיק ו-Shorts שעוצר מ-GitHub Actions (מחשב וירטואלי
+שלה גיטאב), או מכל מחשב מקומי. המטרה: להוריד סרטונים <b>ללא חשבון גוגל, ללא קוקיז
+וללא אימות טלפון</b>.</p>
+<p>הקושי: YouTube חוסם כתובות IP של דאטה סנטר (המחשבים של גיטאב) עם ההודעה
+"Sign in to confirm you're not a bot". הפתרון בפרויקט: <b>Cloudflare WARP</b> — פרוקסי
+חינמי שמוקם בתוך המחשב-Virutali לפני ההורדה, כך שיוטיוב רואה כתובת אחרת.</p>
+
+<h3>שתי שכבות העבודה</h3>
+<table>
+  <tr><th>שכבה</th><th>תפקיד</th></tr>
+  <tr><td><b>yt-dlp</b> (שכבה 1)</td><td>התוכנה העיקרית. עובדת עם לקוחות (android, web) שמאומתים לעבוד מ-דאטה סנטר, דרך WARP</td></tr>
+  <tr><td><b>cobalt</b> (שכבה 2)</td><td>שרת חלופי חינמי. משמש נפילה אם yt-dlp נכשל לחלוטין (כיום לא פעיל)</td></tr>
+</table>
+
+<h2>2. שימוש מקומית</h2>
+<h3>דרישות</h3>
+<ul>
+  <li>לינוקס או Mac (או Git-Bash בוינדוז) עם <code>python3</code> ו-<code>ffmpeg</code></li>
+  <li>אינטרנט; פרוקסי אופציונלי (ראו למטה)</li>
+</ul>
+
+<h3>הפעלה בסיסית</h3>
+<pre>./scripts/download.sh "https://www.youtube.com/watch?v=VIDEO_ID" video 1080
+./scripts/download.sh "https://music.youtube.com/watch?v=VIDEO_ID" audio 320
+./scripts/download.sh "https://www.youtube.com/shorts/SHORT_ID" video 1080</pre>
+
+<h3>פרמטרים</h3>
+<table>
+  <tr><th>פרמטר</th><th>ברירת מחדל</th><th>הסבר</th></tr>
+  <tr><td>1 — קישור</td><td>חובה</td><td>קישור youtube רגיל, Shorts או music.youtube.com (מקוצר אוטומטית)</td></tr>
+  <tr><td>2 — מצב</td><td><code>video</code></td><td><code>video</code> = סרטון; <code>audio</code> = שמע בלבד</td></tr>
+  <tr><td>3 — איכות</td><td><code>1080</code></td><td>לוידאו: מספר (1080, 720, 480...) או <code>max</code>; לאודיו: קצב mp3 (עד 512)</td></tr>
+</table>
+
+<h3>יצירת פלט</h3>
+<p>הקבצים נשמרים בתיקיית <code>downloads/</code>.בנוסף, נוצרים קבצי-עזר:</p>
+<ul>
+  <li><code>download.log</code> — לוג מלא של הניסיונות</li>
+  <li><code>ytdlp-verbose.log</code> — הלוג המפורט של yt-dlp (מופיע בבאגים)</li>
+  <li><code>quality.txt</code> — <b>האיכות האמיתית</b> של הקובץ שנמדד בפועל (ffprobe)</li>
+  <li><code>.download-ok</code> — דגל הצלחה; בלעדיו אין הורדה תקינה</li>
+</ul>
+
+<h3>פרוקסי אופציונלי</h3>
+<pre>YTDLP_PROXY="http://127.0.0.1:1080" ./scripts/download.sh "..." video 1080</pre>
+<p>ב-GitHub Actions הפרוקסי הזה הוא WARP; מקומית אפשר להעמיד כל פרוקסי HTTP.</p>
+
+<h2>3. הרצה דרך GitHub Actions</h2>
+<h3> workflow ההפקה (הראשי)</h3>
+<p>workflow בשם <b>הורדת יוטיוב (הפקה)</b> (<code>download.yml</code>) — זה ה-workflow
+שנועד לשימוש יומיומי. הוא תומך בשני אופני קלט, אפשר לשלב ביניהם באותה ריצה:</p>
+
+<h4>א. רשימת הורדות (קובץ)</h4>
+<p>קובץ <code>downloads-list.txt</code> בשורש ה-repo. פורמט כל שורה:</p>
+<pre>&lt;קישור&gt; [מצב] [איכות]
+
+# דוגמאות:
+https://www.youtube.com/watch?v=dQw4w9WgXcQ video 1080
+https://music.youtube.com/watch?v=XXXX audio 320
+https://www.youtube.com/shorts/XXXX video 1080</pre>
+<ul>
+  <li>ברירות מחדל: מצב <code>video</code>, איכות <code>1080</code></li>
+  <li>שורות ריקות ושורות שמתחילות ב-# מתעלמות</li>
+  <li>קישורים כפולים לא ירדו פעמיים</li>
+  <li><b>מומלץ למחוק כל שורה אחרי הורדה מוצלחת</b> — כדי שהריצה היומית לא תוריד שוב</li>
+</ul>
+
+<h4>ב. קלט ידני (בזמן ההרצה)</h4>
+<p>בלחיצה על <b>Run workflow</b> מופיעים שלושה שדות אופציונליים: קישור, מצב ואיכות.
+הקישור הידני <b>מתווסף</b> לרשימה לאותה ריצה בלבד (לא נשמר לקבוע).</p>
+
+<h4>ג. תזמון אוטומטי</h4>
+<p>הריצה היומית בשעה <b>03:00 UTC</b> (05:00 שעון ישראל) מעבדת אוטומטית את מה שנשאר
+ברשימה. אם הרשימה ריקה — הריצה נעצרת בלי להוריד דבר.</p>
+
+<h4>תוצרי הריצה</h4>
+<ul>
+  <li><b>Summary</b> לכל סרטון: כתובת ה-WARP, קובץ + גודל, ו<b>איכות בפועל</b> שנמדדה
+    (למשל "ווידאו: 1920x1080" או אזהרה "נמוך מהמבוקש")</li>
+  <li><b>Artifact</b> לכל סרטון (<code>download-N</code>), תוקף <b>30 יום</b></li>
+</ul>
+
+<h3> workflowי הבדיקה</h3>
+<table>
+  <tr><th>workflow</th><th>מטרה</th></tr>
+  <tr><td><code>test-warp-download.yml</code></td><td>5 בדיקות דרך WARP — לבדיקת תקינות אחרי שינוי</td></tr>
+  <tr><td><code>test-download.yml</code></td><td>אותן 5 בדיקות ללא פרוקסי — קוו הבסיס להשוואה</td></tr>
+</table>
+
+<h2>4. איך נקבעת האיכות בפועל</h2>
+<p>הסקריפט מנסה בשני סבבים, כל סבב מנסה שלושה לקוחות (android, web_embedded, web):</p>
+<ol>
+  <li><b>סבב איכות מלאה</b> — לווידאו: דורש לפחות 720p (כשנתבקש 1080+);
+    לאודיו: דורש סטרימינג אודיו נפרד. <b>לא מתפשר על 360p בשקט.</b></li>
+  <li><b>סבב התאמה</b> — אם הראשון לא צלח: הטוב ביותר הזמין. כך סרטים ישנים
+    שאין בהם איכות גבוהה לא נדחים לגמרי.</li>
+</ol>
+<p>אחרי ההורדה, <b>ffprobe מודד את הקובץ בפועל</b> וכותב ל-<code>quality.txt</code>
+שמוצג ב-Summary. כך רואים תמיד את האמת — לא רק מה שביקשתם.</p>
+
+<div class="warn">
+<b>למה זה קיים?</b> ב-2026-11-01 התגלה באג: התבקש 1080p וירד 360p, כי יוטיוב
+(לקוח android) החזיר רק פורמט אחד נמוך. התיקון: סבב האיכות המלאה + הדיווח האמין.
+</div>
+
+<h2>5. פתרון תקלות</h2>
+<table>
+  <tr><th>סימפטום</th><th>סיבה אפשרית</th><th>מה לעשות</th></tr>
+  <tr>
+    <td>שלב "בדיקת WARP" נכשל</td>
+    <td>ה-proxy לא עלה תוך 60 שניות</td>
+    <td>לחץ ב-LOG על <code>wireproxy.log</code>; ריצה חוזרת פותרת לרוב</td>
+  </tr>
+  <tr>
+    <td>"Sign in to confirm you're not a bot" חוזרת</td>
+    <td>כתובת WARP חסומה אצל יוטיוב</td>
+    <td>הלולאה מסובבת את ה-IP אוטומטית עד 3 נסיונות; ריצה חוזרת נוספת תעזור</td>
+  </tr>
+  <tr>
+    <td>ההורדה נכשלת בכל הסבבים</td>
+    <td>yt-dlp לא עובד מ-DA IPs כרגע</td>
+    <td>בדוק <code>ytdlp-verbose.log</code> ב-Summary; נסה שוב מאוחר יותר</td>
+  </tr>
+  <tr>
+    <td>הקובץ ירד אבל האיכות נמוכה</td>
+    <td>אין איכות גבוהה זמינה לסרטון, או SABR</td>
+    <td>בדוק שורת "איכות בפועל" ב-Summary; הסרטון עצמו כנראה מוגבל</td>
+  </tr>
+  <tr>
+    <td>רשימה ריקה — הריצה נעצרה</td>
+    <td>אין פריטים בעיבוד</td>
+    <td>תקין! הוסף קישורים ל-<code>downloads-list.txt</code> או הזן קלט ידני</td>
+  </tr>
+  <tr>
+    <td>קובץ לא הופיע ב-Artifact</td>
+    <td>ההורדה נכשלת</td>
+    <td>Summary יציג ❌ + 30 שורות אחרונות של לוג yt-dlp</td>
+  </tr>
+</table>
+
+<h2>6. שאלות נפוצות</h2>
+<ul>
+  <li><b>האם צריך חשבון גוגל או קוקיז?</b> לא. אין שום תלות בחשבון.</li>
+  <li><b>האם legal?</b> ההורדה עשויה להפר את תנאי השירות של YouTube — באחריות המשתמש.</li>
+  <li><b>כמה סרטים בו-זמנית?</b> כל סרטון הוא job נפרד בריצה — הם רצים במקביל.</li>
+  <li><b>מתי הקבצים נמחקים?</b> Artifact נשמר 30 יום; אפשר להוריד מתי שרוצים.</li>
+  <li><b>האם WARP חינמי?</b> כן. אין הרשמה, אין טלפונים, אין חשבון.</li>
+  <li><b>למה לפעמים זה לוקח כמה דקות?</b> בין נסיונות יש המתנה של 20 שניות
+    (יוטיוב מאט DC IPs), וסיבוב IP נוסף כ-2 דקות.</li>
+  <li><b>האם אפשר איכות מעל 1080?</b> כן — ב-cliet <code>max</code> מוריד את
+    הגבוה ביותר הזמין (לפי זמינות YouTube).</li>
+</ul>
+
+<h2>7. מגבלות ידועות</h2>
+<ul>
+  <li><b>WARP probabilistic</b> — חלק מכתובות היציאה חסומות; לולאת סיבוב IP מטפלת,
+    מוגבלת ל-3 נסיונות ל-job.</li>
+  <li><b>ניסוי SABR של יוטיוב</b> — לפעמים לקוחות מחזירים רק פורמט 360p.
+    סבב האיכות מטפל; אם לא — quality.txt יציג את המצב ב-Summary.</li>
+  <li><b>wgcf אינו רשמי</b> — כלי קהילתי, עשוי להפסיק לעבוד.</li>
+  <li><b>cobalt כבוי</b> — השרת האחרון (<code>co.otomir23.me</code>) לא פעיל;
+    שכבה 2 מוכנה אבל לא תציל כרגע.</li>
+  <li><b>אין repo פרטי</b> — הריפויטורי המקומי לא מכיל <code>.git</code>;
+    ההעלאה לגיטאב ביד.</li>
+</ul>
+
+<h2>8. טיפים</h2>
+<div class="tip">
+<ul>
+  <li><b>נתחיל קטן:</b> הרצה ידנית עם קישור אחד לפני שמכניסים רשימה ארוכה.</li>
+  <li><b>נקו אחרי הצלחה:</b> מחקו שורות מ-<code>downloads-list.txt</code> אחרי
+    כל הורדה מוצלחת — אחרת הריצה היומית תוריד שוב.</li>
+  <li><b>תמיד לבדוק quality.txt:</b> "גודל" גדול לא אומר איכות גבוהה —
+    השורה "איכות בפועל" ב-Summary היא מקור האמת.</li>
+  <li><b>לקרוא את הלוגים:</b> כשלון מציג ב-Summary 30 שורות אחרונות של yt-dlp —
+    לרוב מספיק כדי להבין מה קרה.</li>
+  <li><b>לעבוד עם לוח זמנים:</b> ה-schedule היומי מסדר את הרשימה;
+    בדקו את Actions בבוקר כדי לראות מה ירד.</li>
+</ul>
+</div>
+
+<p class="date" style="color:#6c757d; font-size:.9rem; margin-top:2rem;">
+עודכן: 2026-11-01 — מקור האמת למצב הפרויקט: <code>docs/STATUS.html</code></p>
+
+</body>
+</html>

@@ -32,15 +32,17 @@
 ללא אימות טלפון בפלטפורמת משנה.</p>
 
 <h2>2. מצב נוכחי</h2>
-<p><b>WARP + לולאת סיבוב IP מוכחים עובד — ריצה #5, 5/5 הצלחה מלאה (2026-11-01).</b>
-סיבוב ה-IP עבד בפועל בריצה (לוג: "ניסיון 1: חסימת bot — מסובב כתובת WARP"), והאודיו ירד כ-mp3 אמיתי.
-נרכש workflow הפקה קבוע (<code>download.yml</code>): מעבד קובץ רשימת קישורים (<code>downloads-list.txt</code>)
-בתוספת קלט ידני, עם טריגר schedule יומי. פתוח: דחיפה וריצה ראשונה של workflow ההפקה.</p>
+<p><b>workflow ההפקה נבדק וחשף באג איכות: בקשו 1080p ירד 360p (2026-11-01, הרצה #1).</b>
+הסיבה: ה-client <code>android</code> החזיר רק פורמט 18 (360p) בגלל ניסוי SABR של יוטיוב,
+ה-selector קיבל אותו בשקט (360 ≤ 1080), ו-Audiorund ירד ממקור 360p.
+<b>תוקן:</b> שני סבבי איכות (א' >=720p/אודיו-נפרד, ב' התאמה) + דיווח איכות אמיתי
+via ffprobe (<code>quality.txt</code> ב-Summary). פתוח: דחיפה וריצה חוזרת לאימות התיקון.
+WARP + לולאת סיבוב IP מוכחים (ריצה #5: 5/5).</p>
 
 <h2>3. פתוח כרגע</h2>
 <ol>
-  <li>דחיפה וריצה ראשונה של <code>download.yml</code> (workflow ההפקה) —
-    בדיקת קבלה: הרצה ידנית עם קישור אחד, ואז רשימה מלאה</li>
+  <li>דחיפה וריצה חוזרת של <code>download.yml</code> — בדיקת התיקון לאיכות:
+    לוג צריך להראות סבב "איכות מלאה", ו-Summary צריך להציג "איכות בפועל" >= 720p</li>
   <li>לוודא שהschedule היומי (03:00 UTC) מופעל אוטומטית ב-repo</li>
   <li>במידת צורך (טרם נדרש): runner ביתי כמפלט ודאי</li>
 </ol>
@@ -105,6 +107,14 @@
     yt-dlp הוריד mp4 (6,367,747B — זהה לקובץ הווידאו של אותו סרטון) אך ההמרה ל-mp3 נכשלה
     (exit 1). שלב הסיכום בדק "קיים קובץ >1KB" ולכן הציג ✅. תוקן: דגל <code>.download-ok</code>
     + אימות סיומת (אודיו: mp3/m4a בלבד).</li>
+  <li><span class="bad">באג איכות מאומת 2026-11-01 (הרצה #1 של download.yml):</span>
+    <b>ביקשו 1080p ירד 360p (540×360, 605Kbps) — ffprobe מאשר.</b>
+    הלוג: <code>Downloading 1 format(s): 18</code> + אזהרת SABR — ה-client
+    <code>android</code> החזיר רק פורמט 18 (360p) כי יוטיוב מריץ ניסוי streaming
+    שמדלג על פורמטים נפרדים, וה-selector הישן <code>b[height&lt;=1080]</code> קיבל
+    אותו כי 360 ≤ 1080. באותו run: אודיו mp3 320K כן, אך מקורו=format 18 (אודיו מתוך סרט).
+    בדיקות #3/#5 לא חשפו זאת כי ה-client web (לא android) זכה אז והחזיר פורמטים מלאים.
+    <b>תוקן:</b> סבב איכות מלאה (>=720p או ba נפרד) לפני סבב ההתאמה + דיווח ffprobe.</li>
   <li><span class="ok">מאומת מריצה #4, 2026-11-01:</span> <b>סיבת כשלון ההמרה ל-mp3 היה ffmpeg חסר</b> —
     לוג ה-runner: "ffmpeg לא היה מותקן ב-runner" → "✔ ffmpeg הותקן בהצלחה".
     ה-<code>ensure_ffmpeg</code> החדש מתקין אותו אוטומטית — תיקון מאומת.</li>
@@ -176,10 +186,22 @@
   <li>2026-11-01: <b>workflow הפקה <code>download.yml</code></b> — שני jobs:
     בניית תור מ-<code>downloads-list.txt</code> + קלט ידני → job הורדה לכל פריט
     (WARP + סיבוב IP, artifact בתוקף 30 יום), טריגר schedule יומי 03:00 UTC</li>
+  <li>2026-11-01: <b>הרצה #1 של workflow ההפקה — 2/2 אך באג איכות חשוף</b>:
+    וידאו 1080p בקשו ירד 360p (client android החזיר רק פורמט 18 — ניסוי SABR);
+    ffprobe אישר 540×360. אודיו mp3 ירד אך ממקור סרט</li>
+  <li>2026-11-01: <b>תיקון באג האיכות ב-<code>download.sh</code></b> — שני סבבים:
+    א' איכות מלאה (וידאו >= 720p לבקשות 1080+ / אודיו ba נפרד), ב' התאמה;
+    + <code>report_quality</code> — ffprobe כותב <code>quality.txt</code>,
+    ה-workflows מציגים "איכות בפועל" ב-Summary</li>
+  <li>2026-11-01: פיצול <code>download.sh</code> (293 → 156) +
+    <code>download-lib.sh</code> (155) — מגבלת 250 שורות לקובץ</li>
 </ul>
 
 <h2>8. אזהרות ומגבלות</h2>
 <ul>
+  <li><b>ניסוי SABR של יוטיוב</b> (מאומת 2026-11-01): לקוחות android מחזירים לפעמים רק פורמט 18 (360p).
+    סבב האיכות המלאה אמור לטפל בזה; אם יוטיוב תחסום גם clients אחרים — האיכות עלולה לרדת ל-360p,
+    אך <code>quality.txt</code> יחשוף זאת ב-Summary</li>
   <li><b>WARP נבדקה בהצלחה ב-2026-11-01</b> (ריצה #5: 5/5) — אך ההיקף עדיין קטן. כתובות יציאה של WARP משותפות — יוטיוב עלול לחסום חלקן; לולאת סיבוב ה-IP מטפלת בזה, מוגבלת ל-3 נסיונות ל-job</li>
   <li><code>wgcf</code> הוא כלי לא רשמי של Cloudflare — עשוי להפסיק לעבוד</li>
   <li>ההורדה עלולה להפר את תנאי השירות של YouTube — באחריות המשתמש</li>
@@ -189,9 +211,12 @@
 
 <h2>9. מסמכים קשורים</h2>
 <ul>
-  <li><a href="מדריך-מקוצר.html">מדריך מקוצר</a> — איך להריץ את הבדיקה</li>
+  <li><a href="מדריך-מקוצר.html">מדריך מקוצר</a> — התקנה, הפעלה, שימוש בסיסי</li>
+  <li><a href="מדריך-מורחב.html">מדריך מורחב</a> — כל האפשרויות, דוגמאות, פתרון תקלות, שאלות נפוצות</li>
   <li><code>scripts/download.sh</code> — סקריפט ההורדה (עם תמיכת YTDLP_PROXY)</li>
-  <li><code>.github/workflows/test-warp-download.yml</code> — workflow הניסוי הנוכחי</li>
+  <li><code>scripts/download-lib.sh</code> — פונקציות עזר (cobalt, אימות, דיווח איכות, ffmpeg)</li>
+  <li><code>.github/workflows/download.yml</code> — workflow ההפקה (רשימה + קלט ידני + schedule)</li>
+  <li><code>.github/workflows/test-warp-download.yml</code> — workflow הניסוי</li>
   <li><code>.github/workflows/test-download.yml</code> — workflow הבדיקה הישן (ללא פרוקסי)</li>
 </ul>
 
