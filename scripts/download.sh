@@ -14,7 +14,8 @@
 # סבב א' — איכות מלאה: דורש רזולוציה סבירה (לפחות 720p לבקשות 1080+)
 #          או אודיו נפרד (ba) — לא מתפשר בשקט על 360p
 # סבב ב' — התאמה: הטוב ביותר הזמין, כדי לא לחסום סרטים שאין בהם איכות גבוהה
-# לקוחות: android,web — מאומתים ל-DC IPs, ללא PO Token
+# לקוחות (בסדר ניסיון): tv,ios — לא מושפעים מניסוי SABR, נותנים 1080p;
+#   android,web_embedded,web — נשמרים כמפלט (נופלים ל-360p תחת הניסוי)
 # שכבת נפילה: cobalt API — אם כל ה-clients כשלו
 #
 # הקבצים נשמרים בתיקיית ./downloads (ניתן לשנות במשתנה OUTPUT_DIR)
@@ -49,10 +50,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/download-lib.sh"
 
 # -----------------------------------------------------------------------------
-# שכבת yt-dlp עם player_client=android,web (מאומן ל-DC IPs)
+# שכבת yt-dlp עם player_client — tv/ios ראשונים (לא מושפעים מניסוי SABR)
 # -----------------------------------------------------------------------------
 try_android_web() {
-  log "שכבת yt-dlp: player_client=android,web (מאומן ל-DC IPs, ללא PO Token)"
+  log "שכבת yt-dlp: player_client=tv,ios,android,web_embedded,web (tv/ios עוקפים ניסוי SABR)"
 
   python3 -m pip install --quiet --upgrade "yt-dlp" >>"$LOG_FILE" 2>&1 \
     || { log "התקנת yt-dlp נכשלה"; return 1; }
@@ -60,7 +61,7 @@ try_android_web() {
   local out_pattern="$OUTPUT_DIR/%(title)s [%(id)s].%(ext)s"
 
   # --- בניית פורמטים: סבב איכות מלאה + סבב התאמה --------------------------
-  # הסיבה: לקוחות android מחזירים לפעמים רק פורמט 18 (360p) בגלל ניסוי SABR
+  # הסיבה: הלקוחות android/web/web_embedded לפעמים מחזירים רק פורמט 18 (360p)
   # של יוטיוב — וה-selector הישן קיבל אותו בשקט כי 360 <= 1080.
   local -a extra_strict=() extra_lenient=()
   local skip_lenient=0
@@ -90,9 +91,12 @@ try_android_web() {
     extra_lenient=(-f "bv*[height<=${QUALITY}][ext=mp4]+ba[ext=m4a]/b[height<=${QUALITY}]/b" --merge-output-format mp4)
   fi
 
-  # android + web — השילוב שמאומן לעבוד מ-Datacenter IPs
+  # סדר הלקוחות חשוב (ניסוי SABR של יוטיוב, נבדק 2026-11-01):
+  # tv + ios — לא מושפעים מהניסוי, נותנים קישורי הורדה מלאים (1080p)
+  # android/web_embedded/web — מושפעים: נופלים לפורמט 18 בלבד (360p)
+  # android/web נשמרים כמפלט לסרטים ש-tv לא פותח (UNPLAYABLE)
   # --force-ipv4: מאלץ שימוש ב-IPv4 בלבד, לעקיפת חסימות IP של DC
-  local -a clients=("android" "web_embedded" "web")
+  local -a clients=("tv" "ios" "android" "web_embedded" "web")
   local -a proxy_args=()
   [ -n "$PROXY" ] && { proxy_args=(--proxy "$PROXY"); log "yt-dlp עובד דרך פרוקסי: $PROXY"; }
 
@@ -138,7 +142,7 @@ try_android_web() {
     fi
   fi
 
-  log "yt-dlp נכשל בכל נסיונות client android/web"
+  log "yt-dlp נכשל בכל נסיונות הלקוחות (tv,ios,android,web_embedded,web)"
   return 1
 }
 
@@ -150,7 +154,7 @@ log "מתחיל: $URL | מצב=$MODE | איכות=$QUALITY"
 # וידוא ש-ffmpeg זמין (המרת אודיו, מיזוג וידאו+אודיו)
 ensure_ffmpeg
 
-# ניסיון ראשון: yt-dlp עם android/web client (ללא PO Token, מותאם ל-DC IPs)
+# ניסיון ראשון: yt-dlp עם לקוחות tv/ios/... (tv ו-ios עוקפים ניסוי SABR)
 try_android_web || try_cobalt || fail "כל השכבות נכשלו"
 
 verify_output
