@@ -117,6 +117,7 @@ try_android_web() {
         first=0
         if yt-dlp \
             --js-runtimes node \
+            --remote-components ejs:github \
             --extractor-args "youtube:player_client=$client" \
             --sleep-requests 2 \
             --retries 5 \

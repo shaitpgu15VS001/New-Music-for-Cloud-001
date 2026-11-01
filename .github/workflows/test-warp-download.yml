@@ -156,8 +156,9 @@ jobs:
 
       # --- שלב 3: הורדה דרך הפרוקסי -----------------------------------------
       # --- שלב 3: הורדה דרך הפרוקסי עם סיבוב IP אוטומטי ---------------------
-      # חסימת "Sign in to confirm" היא per-IP: אם הורדה נכשלה בסוג חסימה זה,
-      # מסובבים לכתובת WARP חדשה (רישום חשבון חדש) ומנסים שוב — עד 3 סבבים.
+      # חסימות per-IP: "Sign in to confirm" וגם HTTP 403 (כתובת היציאה חסומה
+      # אצל יוטיוב — הדף נפתח אך קובץ המדיה נדחה) — מסובבים לכתובת WARP חדשה
+      # (רישום חשבון חדש) ומנסים שוב — עד 3 סבבים.
       # כשלונים אחרים (רשת, באגים) לא מסובבים IP — לא יעזור.
       - name: הרצת סקריפט ההורדה דרך הפרוקסי
         env:
@@ -182,10 +183,10 @@ jobs:
             if bash scripts/download.sh "$url" "$mode" "$quality"; then
               exit 0
             fi
-            # האם הכשלון הוא חסימת bot? (הסיבה היחידה שסיבוב IP מטפל בה)
+            # האם הכשלון הוא חסימת IP? (הסיבה היחידה שסיבוב IP מטפל בה)
             if [ "$attempt" -lt 3 ] \
-               && grep -q "Sign in to confirm" downloads/download.log 2>/dev/null; then
-              echo "::warning::ניסיון $attempt: חסימת bot — מסובב כתובת WARP"
+               && grep -qE "Sign in to confirm|HTTP Error 403" downloads/download.log 2>/dev/null; then
+              echo "::warning::ניסיון $attempt: חסימה (bot/403) — מסובב כתובת WARP"
               bash scripts/warp-rotate.sh warp || exit 1
             else
               break

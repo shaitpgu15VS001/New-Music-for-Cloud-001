@@ -217,8 +217,8 @@ jobs:
               exit 0
             fi
             if [ "$attempt" -lt 3 ] \
-               && grep -q "Sign in to confirm" downloads/download.log 2>/dev/null; then
-              echo "::warning::ניסיון $attempt: חסימת bot — מסובב כתובת WARP"
+               && grep -qE "Sign in to confirm|HTTP Error 403" downloads/download.log 2>/dev/null; then
+              echo "::warning::ניסיון $attempt: חסימה (bot/403) — מסובב כתובת WARP"
               bash scripts/warp-rotate.sh warp || exit 1
             else
               break
