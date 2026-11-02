@@ -49,7 +49,7 @@ fi
 # על Git-Bash (וינדוז): pwd מחזיר צורה POSIX (/c/...) ש-yt-dlp ו-ffprobe
 # של וינדוז לא מבינים — הקבצים נוחתים בתיקייה שגוייה ואז מתקבל "לא נמצא
 # קובץ פלט" (אותר ותוקן 2026-11-02). cygpath -m מחזיר C:/... שכולם מבינים;
-# בלי cygpath (לינק눅ס/Mac) — נופלים ל-pwd כרגיל, ללא שינוי התנהגות.
+# בלי cygpath (לינוקס/Mac) — נופלים ל-pwd כרגיל, ללא שינוי התנהגות.
 OUTPUT_DIR="$(mkdir -p "$OUTPUT_DIR" && cd "$OUTPUT_DIR" && { command -v cygpath >/dev/null 2>&1 && cygpath -m "$PWD" || pwd; })"
 LOG_FILE="$OUTPUT_DIR/download.log"
 
@@ -86,6 +86,13 @@ try_android_web() {
   # של יוטיוב — וה-selector הישן קיבל אותו בשקט כי 360 <= 1080.
   local -a extra_strict=() extra_lenient=()
   local skip_lenient=0
+
+  # --- מטא-דאטה (שלב 1, אומת בניסוי 2026-11-02) ----------------------------
+  # --embed-metadata: yt-dlp כותב דרך ffmpeg כותרת, תאריך, תיאור, קישור
+  #   למקור, אמן, ז'אנר, אלבום ושם שיר — מידע שנשאב מיוטיוב ללא מפתח.
+  #   אומת: FFmpegMetadata רוץ לפני EmbedThumbnail בסדר ה-post-processors,
+  #   ו-9/9 מקרי קצה קשים (עברית, אימוג'י, 5000 תווים) עברו ללא שגיאה.
+  local -a meta_args=(--embed-metadata)
   if [ "$MODE" = "audio" ]; then
     # QUALITY מספרית וסבירה (עד 512) = ביטרעט mp3 מבוקש, אחרת m4a.
     # סבב א': אודיו נפרד (ba) בלבד — לא נשחק מסרט 360p.
@@ -94,15 +101,19 @@ try_android_web() {
     #   yt-dlp בוחר את התמונה הגבוהה ביותר הזמינה; אם שליפתה נכשלת — ההורדה
     #   ממשיכה בלעדיה (לא קטלני — אומת בקוד yt-dlp, 2026-11-02).
     if echo "$QUALITY" | grep -qE '^[0-9]+$' && [ "$QUALITY" -le 512 ]; then
-      extra_strict=(-f "ba" -x --audio-format mp3 --audio-quality "${QUALITY}K" --embed-thumbnail)
-      extra_lenient=(-f "ba/b" -x --audio-format mp3 --audio-quality "${QUALITY}K" --embed-thumbnail)
+      # mp3 בלבד: שלב הטמעת התמונה מאלץ id3v2.3 ומקצר את התאריך מ-20230402
+      # ל-2023. id3v2_version 4 עוקף זאת — אומת בניסוי: התאריך המלא נשמר,
+      # הקאבר מוטמע, וגם ID3v1 הישן לוינדוז נשאר.
+      meta_args+=(--postprocessor-args "EmbedThumbnail:-id3v2_version 4")
+      extra_strict=(-f "ba" -x --audio-format mp3 --audio-quality "${QUALITY}K" --embed-thumbnail "${meta_args[@]}")
+      extra_lenient=(-f "ba/b" -x --audio-format mp3 --audio-quality "${QUALITY}K" --embed-thumbnail "${meta_args[@]}")
     else
-      extra_strict=(-f "ba" -x --audio-format m4a --embed-thumbnail)
-      extra_lenient=(-f "ba/b" -x --audio-format m4a --embed-thumbnail)
+      extra_strict=(-f "ba" -x --audio-format m4a --embed-thumbnail "${meta_args[@]}")
+      extra_lenient=(-f "ba/b" -x --audio-format m4a --embed-thumbnail "${meta_args[@]}")
     fi
   elif [ "$QUALITY" = "max" ]; then
     # "max" — הטוב ביותר הזמין; אין מגבלת מינימום, סבב אחד מספיק
-    extra_strict=(-f "bv*+ba/b" --merge-output-format mp4)
+    extra_strict=(-f "bv*+ba/b" --merge-output-format mp4 "${meta_args[@]}")
     skip_lenient=1
   else
     # וידאו במספר: סבב א' דורש >= 720p (או >= המבוקש אם נמוך מ-720) —
@@ -111,8 +122,8 @@ try_android_web() {
     if echo "$QUALITY" | grep -qE '^[0-9]+$' && [ "$QUALITY" -ge 720 ]; then
       min_h=720
     fi
-    extra_strict=(-f "bv*[height<=${QUALITY}][height>=${min_h}][ext=mp4]+ba[ext=m4a]/b[height<=${QUALITY}][height>=${min_h}]" --merge-output-format mp4)
-    extra_lenient=(-f "bv*[height<=${QUALITY}][ext=mp4]+ba[ext=m4a]/b[height<=${QUALITY}]/b" --merge-output-format mp4)
+    extra_strict=(-f "bv*[height<=${QUALITY}][height>=${min_h}][ext=mp4]+ba[ext=m4a]/b[height<=${QUALITY}][height>=${min_h}]" --merge-output-format mp4 "${meta_args[@]}")
+    extra_lenient=(-f "bv*[height<=${QUALITY}][ext=mp4]+ba[ext=m4a]/b[height<=${QUALITY}]/b" --merge-output-format mp4 "${meta_args[@]}")
   fi
 
   # סדר הלקוחות (מחקר ובדיקה מקומית מאומתים 2026-11-01):

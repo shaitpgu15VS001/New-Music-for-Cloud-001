@@ -28,7 +28,8 @@ def main() -> int:
         tags = ID3(audio)
         tags.delall("APIC")  # מסירים את התמונה הישנה قبل הוספת החדשה
         tags.add(APIC(encoding=3, mime=mime, type=3, desc="Cover", data=data))
-        tags.save(v2_version=3)  # id3v2.3 — התאמה למה ש-yt-dlp כותב
+        tags.save(v2_version=4)  # id3v2.4 — עקביות עם yt-dlp; TDRC (תאריך
+        #   מלא) נשמר גם ב-3 (אומת), אך 4 הוא התקן הרשמי ותואם ל-mp3 הטרי
     else:
         from mutagen.mp4 import MP4, MP4Cover
         mp4 = MP4(audio)

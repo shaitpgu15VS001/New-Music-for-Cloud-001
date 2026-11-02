@@ -23,7 +23,7 @@
 <body>
 
 <h1>הורדה מיוטיוב — מצב הפרויקט</h1>
-<p class="date">עודכן: 2026-11-02</p>
+<p class="date">עודכן: 2026-11-03</p>
 
 <h2>1. סקירה</h2>
 <p>מטרת הפרויקט: אוטומציית הורדה מיוטיוב ויוטיוב מיוזיק שתפעל מ-GitHub Actions
@@ -44,6 +44,14 @@
 ברירת מחדל, התנהגות קיימת ללא שינוי) או <code>square</code> (ריבוע שווה-מרכז);
 פתרון post-embed replacement דרך mutagen אומת מקומית בארבע הרצות
 (mp3/m4a × full/square), ממתין לאימות בענן.</p>
+<p><b>חדש (2026-11-03): מטא-דאטה מלא בכל קובץ (שלב 1 + שלב 2, אושר 2026-11-02).</b>
+yt-dlp כותב כעת כותרת, תאריך, תיאור, קישור למקור, אמן, ז'אנר ואלבום
+(<code>--embed-metadata</code> בכל מעגלי ההורדה + תיקון באג התאריך ב-mp3),
+וסקריפט חדש <code>scripts/enrich-metadata.py</code> משלים אלבום / תאריך שחרור /
+ז'אנר / מספר רצועה / אמן מ-iTunes החינמי — אך ורק בהתאמת משך (סף 10 שניות),
+ולא קטלני. אומת בהרצה אמיתית מקומית 2026-11-03: mp3 עם
+<code>date=20230402</code> מלא, ID3v2.4 + ID3v1, קאבר 480×480, ו"מטא-דאטה: ✓"
+ב-quality.txt. <b>טרם אומת בענן.</b></p>
 
 <h2>3. פתוח כרגע</h2>
 <ol>
@@ -54,6 +62,9 @@
     (מקומית אומתה 2026-11-02); לאחר מכן לאמת גם <code>square</code> —
     ציפייה: "קאבר: ✓ (ריבוע)" + קאבר 720x720 ב-ffprobe
     (מקומית אומתה 2026-11-02 בארבע הרצות)</li>
+  <li>אימות מטא-דאטה בענן — הרצה אחת של download.yml ובדיקת "מטא-דאטה: ✓"
+    + <code>date=YYYYMMDD</code> מלא ב-Summary/Artifact (מקומית אומתה 2026-11-03
+    בהרצה אמיתית); מומלץ אז גם מבחן iTunes על שיר אמיתי ברשימה</li>
   <li>לוודא שהschedule היומי (03:00 UTC / 05:00 ישראל) מופעל בפועל ב-repo —
     לבדוק ב-Actions טאב "Scheduled workflows" או להמתין להרצה ראשונה ב-03:00</li>
   <li>במידת צורך (טרם נדרש): runner ביתי כמפלט ודאי</li>
@@ -119,9 +130,20 @@
     <td>שורה 44 החזירה <code>/c/...</code> ש-yt-dlp של וינדוז לא מבין — קבצים
       נחתמו בתיקייה שגוייה ו"לא נמצא קובץ פלט" (אותר ע"י הבדיקה המקומית);
       <code>cygpath -m</code> מחזיר <code>C:/...</code> שכולם מבינים;
-      על לינק눅ס/Mac אין cygpath — ההתנהגות לא משתנה</td>
+      על לינוקס/Mac אין cygpath — ההתנהגות לא משתנה</td>
     <td>השארת המצב (שוברת כל הרצה מקומית בוינדוז); <code>pwd -W</code>
       (לא קיים ב-bash רגיל)</td>
+  </tr>
+  <tr>
+    <td><b>מטא-דאטה בשני שלבים</b> (אושר 2026-11-02: שלב 1 + שלב 2)</td>
+    <td>שלב 1: <code>--embed-metadata</code> מובנה ב-yt-dlp — ללא תלויות חדשות,
+      אומת 9/9 מקרי קצה; תיקון באג mp3 דרך
+      <code>--postprocessor-args "EmbedThumbnail:-id3v2_version 4"</code> (אומת בניסוי).
+      שלב 2: iTunes Search API ללא מפתח + הגנת משך (סף 10 שניות) — כתיבה רק
+      בהתאמה בטוחה, לא קטלני; אושר יחד עם שלב 1 ב-2026-11-02</td>
+    <td>Spotify (דורש מפתח ו-Secrets; שלב 2 מספיק); YouTube Data API (yt-dlp כבר
+      שואב הכול); Deezer (0 תוצאות בניסוי); oEmbed (אין תוספת); תוספי yt-dlp
+      (מורכב מדי); MusicBrainz (עובד וחינמי אך מיותר כרגע)</td>
   </tr>
   <tr>
     <td><b>צורת קאבר אופציונלית: post-embed replacement</b> (2026-11-02)</td>
@@ -286,6 +308,42 @@
   <li><span class="ok">מאומת בקוד המקור של mutagen 1.48, 2026-11-02:</span>
     <b>מפתחות MP4Tags הם str ולא bytes</b> — כתיבת <code>tags[b"covr"]</code>
     זורק TypeError; הכתיב הנכון <code>tags["covr"]</code> (אותר בניסוי).</li>
+  <li><span class="ok">מאומת בקוד yt-dlp ובניסויים, 2026-11-02:</span>
+    <b><code>--embed-metadata</code> כותב title, date (מ-upload_date בלבד),
+    description, purl/comment (הקישור למקור), artist, genre, album, track, disc,
+    composer</b> — מיפוי FFmpegMetadataPP; סדר ה-post-processors: FFmpegMetadata רץ
+    <b>לפני</b> EmbedThumbnail; 9/9 מקרי קצה קשים עברו (עברית, אימוג'י, 5000 תווים,
+    שורות חדשות, <code>=</code>, <code>;</code>, סוגריים, ציטוטים); עלות ~70ms
+    לקובץ; פרקי יוטיוב כותבים ל-mp3 (CHAP) בשלום. תופעת לוואי חיובית:
+    <code>--embed-metadata</code> מפעיל גם embed-chapters אם יש פרקים.</li>
+  <li><span class="bad">באג mp3 מאומת — ובגרסת yt-dlp 2026.10.26 גם כן, 2026-11-02/03:</span>
+    EmbedThumbnailPP שורה 92 מאלץ <code>-id3v2_version 3</code> → תאריך 20230402
+    מקוצר ל-TYER 2023. התיקון המאומת בניסוי: <code>--postprocessor-args
+    "EmbedThumbnail:-id3v2_version 4"</code> — תוצאה אחת: ID3v2.4 + TDRC מלא +
+    ID3v1 לוינדוז + קאבר מוטמע. m4a/mp4 לא מושפעים (וניסוח הדגל על m4a הוא exit 0 —
+    בטוח לנתיב ה-nuke של ffmpeg).</li>
+  <li><span class="ok">מאומת בהרצה אמיתית מלאה מקומית, 2026-11-03:</span>
+    download.sh עצמו (לא סימולציה): yt-dlp 2026.10.26 דרך 5 הלקוחות →
+    <code>date=20230402</code>, ID3v2.4, ID3v1 (2023), קאבר 480×480 (ריבוע),
+    title/artist/genre/purl; enrich: "אין התאמה (0 תוצאות)" לסרטון לא-מוזיקלי,
+    exit 0; quality.txt: "מטא-דאטה: ✓ (כותרת, אמן, תאריך, ז'אנר)".</li>
+  <li><span class="ok">מאומת בניסוי, 2026-11-02:</span>
+    <b>iTunes Search API חינמי ללא מפתח</b> (~0.5s, limit=5; 0 תוצאות לסרטון
+    לא-מוזיקלי — דחייה טבעית של מוזיקה לא-קשורה); MusicBrainz גם חינמי אך דורש
+    User-Agent; <b>Deezer נשלל</b> — total=253 אבל data ריק בכל השאילתות.</li>
+  <li><span class="ok">מאומת בקוד yt-dlp, 2026-11-02:</span>
+    תיאור ה-autogen של YT Music (<code>_video.py:~4343</code>) הוא המקור היחיד
+    ביוטיוב ל-album/artists/track/release_date — רק לסרטוני "Topic";
+    סרטון רגיל החזיר None לכל אלה. <code>--parse-metadata date:%(release_date)s</code>
+    לא אומת (הבדיקה נחסמה ע"י הבוט) — ולא נדרש בתוכנית שאושרה.</li>
+  <li><span class="bad">כשלי בדיקה מאומתים, 2026-11-02/03:</span>
+    (א) פלט Python מנותב בוינדוז משתמש ב-cp1255 — סימן ✓ בפלט גרם
+    UnicodeEncodeError ויציאה 1 אף-על-הצלחה (תוקן: reconfigure utf-8 ב-enrich);
+    (ב) מילה קוריאנית זרה (U+B205) נמצאה בשורה 52 של download.sh בתוך
+    "לינוקס" — שהוקדש לפריקת גרסה (תוקן); (ג) בדיקות yt-dlp חוזרות
+    מה-IP המקומי גרמו ל-Sign in to confirm you're not a bot — עומס רשת של
+    הבדיקה, לא באג פרויקט; (ד) שלב yt-dlp בבדיקה מקומית לא רץ כי yt-dlp.exe
+    חסר ב-PATH של Git-Bash (תקלת סביבה מקומית — נפתרת ע"י הוספת Scripts ל-PATH).</li>
 </ul>
 
 <h2>6. נבדקו ונשללו</h2>
@@ -295,6 +353,13 @@
   <li>~40 instancות cobalt קהילתיות — מתות או דורשות טוקן (2026-10-30)</li>
   <li>y2mate / loader.to — לא יציבים, חסומים מ-IP דאטה סנטר</li>
   <li>פלטפורמות ענן חלופיות — באותה בעיית IP דאטה סנטר כמו גיטאב (לא נחקרו בנפרד — מיותר)</li>
+  <li><b>מקורות מטא-דאטה חלופיים לשלב 2</b> (נבחר iTunes, 2026-11-02):
+    Spotify (דורש מפתח + Secret ב-Actions — מיותר כשה-iTunes חינמי);
+    YouTube Data API (yt-dlp כבר שואב את כל מה שיש ביוטיוב — אין תוספת);
+    Deezer (הוחזרו 0 תוצאות בכל השאילתות בניסוי — לא פעיל);
+    oEmbed (מחזיר רק כותרת/אמן — אין תוספת על yt-dlp);
+    תוספי yt-dlp (מורכב מדי להטמעה); MusicBrainz (עובד וחינמי אך דורש
+    User-Agent קפדני — נדחה כמיותר בשלב הזה)</li>
 </ul>
 
 <h2>7. בוצע עד כה</h2>
@@ -396,6 +461,20 @@
     אומת מקומית: 4 הרצות (mp3/m4a × full/square) + ערך לא תקין — כולם exit 0;
     bash -n + py_compile + YAML תקין; קבצי ההוכחה: 720x720 + covr ✓.
     לאימות: ריצה בענן</li>
+  <li>2026-11-03: <b>מטא-דאטה מלא בשני שלבים (אושר 2026-11-02)</b> —
+    (א) <code>download.sh</code>: <code>--embed-metadata</code> בכל 6 ענפי ההורדה
+    + דגל <code>--postprocessor-args "EmbedThumbnail:-id3v2_version 4"</code>
+    בענפי mp3 בלבד (עוקף באג הקיצור לתאריך); (ב) <code>embed-cover.py</code>:
+    כתיבת תגיות גם ב-id3v2.4 (עקביות); (ג) <code>download-lib.sh</code>:
+    פונקציות <code>enrich_metadata</code> + <code>meta_summary</code>, קריאה
+    ב-verify_output (אודיו בלבד) ושורת "מטא-דאטה: ✓ (…)" ב-quality.txt;
+    (ד) קובץ חדש <code>scripts/enrich-metadata.py</code> (231 שורות): iTunes
+    limit=5, סף התאמת משך 10 שניות, זיהוי תוכן הקובץ לפני כתיבה, פלט UTF-8 קבוע.
+    אומת: 5 מבחני יחידה (התאמה ✓ / אי-התאמה לא כותב ✓ / m4a ✓ / 0 תוצאות ✓ /
+    תגית טרייה ✓) + מבחן מיכל משקר ✓ + אינטגרציה מלאה ×2 + <b>הרצה אמיתית
+    2026-11-03</b>: date=20230402 מלא, ID3v2.4 + ID3v1, קאבר 480×480,
+    "מטא-דאטה: ✓ (כותרת, אמן, תאריך, ז'אנר)" ב-quality.txt.
+    לאימות: ריצה בענן</li>
 </ul>
 
 <h2>8. אזהרות ומגבלות</h2>
@@ -423,6 +502,14 @@
     משמיט את צדי התמונה (זה המבוקש); חל על אודיו בלבד — וידאו לא מושפע;
     כשלון בחיתוך לא מפיל את ה-job — הקאבר נשאר מלבן ו-quality.txt מציג
     "קאבר: ✓ (מלבן — החיתוך נכשל)"; ללא תמונה ביוטיוב אין מה לחתוך</li>
+  <li><b>מגבלות מטא-דאטה</b> (מאומת 2026-11-02/03): (א) דרך cobalt (שכבה 2)
+    לא ייכתב מטא-דאטה כלל — yt-dlp אינו רוטף, רק title+artist מה-cobalt;
+    (ב) <code>date</code> הוא <b>תאריך שחרור הווידאו ביוטיוב</b>
+    (upload_date) — לא תאריך הלחן או האלבום; iTunes משלימה תאריך שחרור
+    רק בהתאמת משך; (ג) לסרטונים לא-מוזיקליים הז'אנר שמגיע מיוטיוב הוא
+    קטגוריית הערוץ (לדוגמה "Gaming") — לא ז'אנר מוזיקלי; iTunes לא מחזיר
+    תוצאות לסרטים כאלה (אומת) ולכן לא מוסיף שטויות; (ד) העשרת iTunes
+    לא תקינה לאודיו שאינו שיר (פודקאסט, הרצאה) — משך לא יתאים, לא ייכתב דבר</li>
 </ul>
 
 <h2>9. מסמכים קשורים</h2>
@@ -431,6 +518,8 @@
   <li><a href="מדריך-מורחב.html">מדריך מורחב</a> — כל האפשרויות, דוגמאות, פתרון תקלות, שאלות נפוצות</li>
   <li><code>scripts/download.sh</code> — סקריפט ההורדה (עם תמיכת YTDLP_PROXY)</li>
   <li><code>scripts/download-lib.sh</code> — פונקציות עזר (cobalt, אימות, דיווח איכות, ffmpeg)</li>
+  <li><code>scripts/enrich-metadata.py</code> — העשרת תגיות מ-iTunes (שלב 2)</li>
+  <li><code>scripts/embed-cover.py</code> — החלפת תמונת קאבר מוטמעת (id3v2.4)</li>
   <li><code>.github/workflows/download.yml</code> — workflow ההפקה (רשימה + קלט ידני + schedule)</li>
   <li><code>.github/workflows/test-warp-download.yml</code> — workflow הניסוי</li>
   <li><code>.github/workflows/test-download.yml</code> — workflow הבדיקה הישן (ללא פרוקסי)</li>

@@ -86,10 +86,12 @@ verify_output() {
   # דגל הצלחה — מקור האמת היחיד של ה-workflow (לא "קיים קובץ")
   : > "$OUTPUT_DIR/.download-ok"
   log "✔ הצליח! קובץ: $f ($(du -h "$f" | cut -f1))"
-  # חיתוך קאבר לריבוע (COVER_SHAPE=square) — אודיו בלבד, לא קטלני:
-  # כשלון כאן לא מפיל את ההורדה, רק משנה את ההערה ב-quality.txt
-  if [ "$MODE" = "audio" ] && [ "${COVER_SHAPE:-full}" = "square" ]; then
-    square_cover "$f" || true
+  # חיתוך קאבר לריבוע והעשרת תגיות מאיטונס — אודיו בלבד, לא קטלני (רק הדיווח מושפע)
+  if [ "$MODE" = "audio" ]; then
+    if [ "${COVER_SHAPE:-full}" = "square" ]; then
+      square_cover "$f" || true
+    fi
+    enrich_metadata "$f" || true
   fi
   report_quality "$f"
 }
@@ -142,6 +144,28 @@ square_cover() {
 }
 
 # -----------------------------------------------------------------------------
+# העשרת תגיות מ-iTunes (שלב 2) — לא קטלני; enrich-metadata.py משווה משך מול
+# iTunes ורק בהתאמה (סף 10 שניות) כותב אלבום/תאריך שחרור/ז'אנר/רצועה/אמן.
+# -----------------------------------------------------------------------------
+enrich_metadata() {
+  local f="$1" helper="$SCRIPT_DIR/enrich-metadata.py"
+  command -v python3 >/dev/null 2>&1 && [ -f "$helper" ] || return 0
+  command -v cygpath >/dev/null 2>&1 && helper="$(cygpath -m "$helper")"  # Git-Bash → python (עקרון square_cover)
+  python3 "$helper" "$f" >>"$LOG_FILE" 2>&1 || log "⚠ העשרת מטא-דאטה לא הושלמה (ההורדה תקינה)"
+}
+
+# -----------------------------------------------------------------------------
+# סיכום תגיות מוטמעות מהקובץ עצמו (מקור האמת, לא הלוג) — נקרא ע"י report_quality
+# -----------------------------------------------------------------------------
+meta_summary() {
+  local tags="$1" out="" k
+  for k in "title:כותרת" "artist:אמן" "date:תאריך" "album:אלבום" "genre:ז'אנר"; do
+    echo "$tags" | grep -q "^TAG:${k%%:*}=" && out="$out, ${k#*:}"
+  done
+  [ -n "$out" ] && printf '✓ (%s)' "${out#, }" || printf 'אין'
+}
+
+# -----------------------------------------------------------------------------
 # דיווח איכות אמיתי: ffprobe על הקובץ שהורד בפועל
 # כותב downloads/quality.txt שה-workflow מציג ב-Summary — כדי שהמשתמש יראה
 # את האיכות האמיתית ולא רק את המבוקשת (באג מ-2026-11-01: ביקשו 1080 ירד 360)
@@ -154,7 +178,7 @@ report_quality() {
     return 0
   fi
   if [ "$MODE" = "audio" ]; then
-    local br kbps="" src="" warn="" cover="אין"
+    local br kbps="" src="" warn="" cover="אין" tags
     br=$(ffprobe -v error -select_streams a:0 -show_entries stream=bit_rate \
       -of default=nw=1:nk=1 "$f" 2>/dev/null | head -1)
     [ -n "$br" ] && kbps=$(awk -v b="$br" 'BEGIN{printf "%.0f kbps", b/1000}')
@@ -174,7 +198,8 @@ report_quality() {
          -of csv=p=0 "$f" 2>/dev/null | grep -q "video"; then
       cover="✓${COVER_NOTE:-}"
     fi
-    echo "אודיו: ${kbps:-לאנמדור}${warn}; קאבר: $cover" > "$out"
+    tags=$(ffprobe -v error -show_entries format_tags -of default=nw=1 "$f" 2>/dev/null)
+    echo "אודיו: ${kbps:-לאנמדור}${warn}; קאבר: $cover; מטא-דאטה: $(meta_summary "$tags")" > "$out"
     log "איכות בפועל: $(cat "$out")"
   else
     local res
