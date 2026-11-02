@@ -98,7 +98,7 @@ report_quality() {
     return 0
   fi
   if [ "$MODE" = "audio" ]; then
-    local br kbps="" src="" warn=""
+    local br kbps="" src="" warn="" cover="אין"
     br=$(ffprobe -v error -select_streams a:0 -show_entries stream=bit_rate \
       -of default=nw=1:nk=1 "$f" 2>/dev/null | head -1)
     [ -n "$br" ] && kbps=$(awk -v b="$br" 'BEGIN{printf "%.0f kbps", b/1000}')
@@ -109,7 +109,14 @@ report_quality() {
     case "$src" in
       17|18|22) warn=" — המקור פורמט $src (אודיו מתוך סרט, לא סטרימינג אודיו)" ;;
     esac
-    echo "אודיו: ${kbps:-לאנמדור}${warn}" > "$out"
+    # תמונת קאבר מוטמעת: ffprobe מציגה אותה כזרם וידאו נפרד (attached pic)
+    # גם ב-mp3 (ID3 APIC) וגם ב-m4a (covr) — אומת בתיעוד ffmpeg, 2026-11-02.
+    # חוסר תמונה לא מפיל את האודيو — מדווחים את האמת במקום ✅ שווא.
+    if ffprobe -v error -select_streams v -show_entries stream=codec_type \
+         -of csv=p=0 "$f" 2>/dev/null | grep -q "video"; then
+      cover="✓"
+    fi
+    echo "אודיו: ${kbps:-לאנמדור}${warn}; קאבר: $cover" > "$out"
     log "איכות בפועל: $(cat "$out")"
   else
     local res

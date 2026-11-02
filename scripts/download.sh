@@ -41,7 +41,11 @@ if echo "$URL" | grep -q "music.youtube.com"; then
 fi
 
 # נתיב מוחלט — קריטי: השרת נפתח אחרי cd לתיקייה אחרת
-OUTPUT_DIR="$(mkdir -p "$OUTPUT_DIR" && cd "$OUTPUT_DIR" && pwd)"
+# על Git-Bash (וינדוז): pwd מחזיר צורה POSIX (/c/...) ש-yt-dlp ו-ffprobe
+# של וינדוז לא מבינים — הקבצים נוחתים בתיקייה שגוייה ואז מתקבל "לא נמצא
+# קובץ פלט" (אותר ותוקן 2026-11-02). cygpath -m מחזיר C:/... שכולם מבינים;
+# בלי cygpath (לינק눅ס/Mac) — נופלים ל-pwd כרגיל, ללא שינוי התנהגות.
+OUTPUT_DIR="$(mkdir -p "$OUTPUT_DIR" && cd "$OUTPUT_DIR" && { command -v cygpath >/dev/null 2>&1 && cygpath -m "$PWD" || pwd; })"
 LOG_FILE="$OUTPUT_DIR/download.log"
 
 # טוען פונקציות עזר (cobalt, אימות, דיווח איכות, ffmpeg)
@@ -55,7 +59,10 @@ source "$SCRIPT_DIR/download-lib.sh"
 try_android_web() {
   log "שכבת yt-dlp: player_client=visionos,web,tv,ios,android,web_embedded (visionos עוקף SABR)"
 
-  python3 -m pip install --quiet --upgrade --disable-pip-version-check "yt-dlp" >>"$LOG_FILE" 2>&1 \
+  # mutagen — נחוץ ל--embed-thumbnail ב-m4a; pip install yt-dlp לא מתקין אותה
+  # (היא רק באופציה הנוספת default — אומת ב-PyPI, 2026-11-02). לmp3 לא צריך
+  # אותה — yt-dlp מטמיע את התמונה דרך ffmpeg שגם ככה מותקן (ensure_ffmpeg).
+  python3 -m pip install --quiet --upgrade --disable-pip-version-check "yt-dlp" mutagen >>"$LOG_FILE" 2>&1 \
     || { log "התקנת yt-dlp נכשלה"; return 1; }
 
   local out_pattern="$OUTPUT_DIR/%(title)s [%(id)s].%(ext)s"
@@ -69,12 +76,15 @@ try_android_web() {
     # QUALITY מספרית וסבירה (עד 512) = ביטרעט mp3 מבוקש, אחרת m4a.
     # סבב א': אודיו נפרד (ba) בלבד — לא נשחק מסרט 360p.
     # סבב ב': ba/b — נפילה למסך משותף אם אין אודיו נפרד כלל.
+    # --embed-thumbnail: מטמיע את תמונת הקאבר של השיר בתוך קובץ האודיו.
+    #   yt-dlp בוחר את התמונה הגבוהה ביותר הזמינה; אם שליפתה נכשלת — ההורדה
+    #   ממשיכה בלעדיה (לא קטלני — אומת בקוד yt-dlp, 2026-11-02).
     if echo "$QUALITY" | grep -qE '^[0-9]+$' && [ "$QUALITY" -le 512 ]; then
-      extra_strict=(-f "ba" -x --audio-format mp3 --audio-quality "${QUALITY}K")
-      extra_lenient=(-f "ba/b" -x --audio-format mp3 --audio-quality "${QUALITY}K")
+      extra_strict=(-f "ba" -x --audio-format mp3 --audio-quality "${QUALITY}K" --embed-thumbnail)
+      extra_lenient=(-f "ba/b" -x --audio-format mp3 --audio-quality "${QUALITY}K" --embed-thumbnail)
     else
-      extra_strict=(-f "ba" -x --audio-format m4a)
-      extra_lenient=(-f "ba/b" -x --audio-format m4a)
+      extra_strict=(-f "ba" -x --audio-format m4a --embed-thumbnail)
+      extra_lenient=(-f "ba/b" -x --audio-format m4a --embed-thumbnail)
     fi
   elif [ "$QUALITY" = "max" ]; then
     # "max" — הטוב ביותר הזמין; אין מגבלת מינימום, סבב אחד מספיק
