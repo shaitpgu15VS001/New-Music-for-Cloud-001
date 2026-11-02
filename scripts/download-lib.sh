@@ -12,6 +12,10 @@ COBALT_HOSTS=(
   "https://co.otomir23.me"
 )
 
+# הערה לדיווח על צורת הקאבר — מוצאת ע"י square_cover ונקראת ב-report_quality.
+# ריקה במצב full = הפלט נשאר זהה לפלט הקיים (ללא שינוי).
+COVER_NOTE=""
+
 log()  { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" | tee -a "$LOG_FILE"; }
 fail() { log "✖ $*"; exit 1; }
 
@@ -82,7 +86,59 @@ verify_output() {
   # דגל הצלחה — מקור האמת היחיד של ה-workflow (לא "קיים קובץ")
   : > "$OUTPUT_DIR/.download-ok"
   log "✔ הצליח! קובץ: $f ($(du -h "$f" | cut -f1))"
+  # חיתוך קאבר לריבוע (COVER_SHAPE=square) — אודיו בלבד, לא קטלני:
+  # כשלון כאן לא מפיל את ההורדה, רק משנה את ההערה ב-quality.txt
+  if [ "$MODE" = "audio" ] && [ "${COVER_SHAPE:-full}" = "square" ]; then
+    square_cover "$f" || true
+  fi
   report_quality "$f"
+}
+
+# -----------------------------------------------------------------------------
+# חיתוך תמונת הקאבר לריבוע שווה-מרכז (COVER_SHAPE=square)
+# שיטה (אומתה בניסוי מקומי 2026-11-02 על mp3+m4a): חילוץ התמונה המוטמעת
+#   מהקובץ → חיתוך מרכז דרך ffmpeg → החזרה לאותה תגית דרך mutagen.
+#   נבחר mutagen כי הוא כותב את התגית התקנית (APIC ל-mp3, covr ל-m4a)
+#   בלי לערבב מחדש את קובץ האודיו; שיטת ffmpeg remux נדחתה בניסוי כי
+#   במ4a היא לא כותבת את האטום covr (נשאר track תמונה לא תקני).
+# לא קטלני: כל כשלון כאן משאיר את הקאבר המלבן ומדווח בכנות.
+# -----------------------------------------------------------------------------
+square_cover() {
+  local f="$1"
+  local img sq helper rc
+  COVER_NOTE=" (מלבן — החיתוך נכשל)"
+  if ! command -v ffmpeg >/dev/null 2>&1; then
+    log "⚠ חיתוך קאבר: ffmpeg חסר — התמונה נשארת מלבנית"
+    return 1
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    log "⚠ חיתוך קאבר: python3 חסר — התמונה נשארת מלבנית"
+    return 1
+  fi
+  helper="$SCRIPT_DIR/embed-cover.py"
+  if ! [ -f "$helper" ]; then
+    log "⚠ חיתוך קאבר: embed-cover.py חסר — התמונה נשארת מלבנית"
+    return 1
+  fi
+  # על Git-Bash (וינדוז) SCRIPT_DIR בצורה POSIX (/c/...) ש-python של וינדוז
+  # לא מבין — cygpath -m מחזיר C:/... (אותו עיקרון כמו OUTPUT_DIR בשורה 48);
+  # בלי cygpath (לינוקס/Mac) הנתיב נשאר כמו שהוא.
+  command -v cygpath >/dev/null 2>&1 && helper="$(cygpath -m "$helper")"
+  img="$OUTPUT_DIR/.cover-src.tmp.png"
+  sq="$OUTPUT_DIR/.cover-sq.tmp.png"
+  # -update 1 בחילוץ: תמונה אחת לקובץ (מונע שגיאת image2 sequence)
+  ffmpeg -y -v error -i "$f" -map 0:v:0 -frames:v 1 -update 1 "$img" 2>/dev/null \
+    && ffmpeg -y -v error -i "$img" -vf "crop=min(iw\,ih):min(iw\,ih)" "$sq" 2>/dev/null \
+    && python3 "$helper" "$f" "$sq" >>"$LOG_FILE" 2>&1
+  rc=$?
+  rm -f "$img" "$sq"
+  if [ "$rc" -eq 0 ]; then
+    COVER_NOTE=" (ריבוע)"
+    log "קאבר נחתך לריבוע שווה-מרכז"
+    return 0
+  fi
+  log "⚠ חיתוך הקאבר נכשל — התמונה נשארת מלבנית (ההורדה עצמה תקינה)"
+  return 1
 }
 
 # -----------------------------------------------------------------------------
@@ -112,9 +168,11 @@ report_quality() {
     # תמונת קאבר מוטמעת: ffprobe מציגה אותה כזרם וידאו נפרד (attached pic)
     # גם ב-mp3 (ID3 APIC) וגם ב-m4a (covr) — אומת בתיעוד ffmpeg, 2026-11-02.
     # חוסר תמונה לא מפיל את האודيو — מדווחים את האמת במקום ✅ שווא.
+    # COVER_NOTE מוסיף את צורת הקאבר אם בוצעה חיתוך (ריבוע / כשלון חיתוך);
+    # במצב full ההערה ריקה והפלט נשאר מדויק כמו קודם.
     if ffprobe -v error -select_streams v -show_entries stream=codec_type \
          -of csv=p=0 "$f" 2>/dev/null | grep -q "video"; then
-      cover="✓"
+      cover="✓${COVER_NOTE:-}"
     fi
     echo "אודיו: ${kbps:-לאנמדור}${warn}; קאבר: $cover" > "$out"
     log "איכות בפועל: $(cat "$out")"

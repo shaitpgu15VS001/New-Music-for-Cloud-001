@@ -5,6 +5,10 @@
 #
 # שימוש:
 #   ./download.sh <url> [video|audio] [איכות: מספר או max, ברירת מחדל 1080]
+#                 [צורת קאבר: full|square, ברירת מחדל full]
+#   צורת הקאבר חלה על אודיו בלבד: full = התמונה המלאה כפי שהיא ביוטיוב
+#   (מלבן), square = חיתוך לריבוע שווה-מרכז. ערך לא תקין נופל ל-full
+#   עם אזהרה (לא מפיל את ההורדה).
 #
 # משתנה סביבה:
 #   YTDLP_PROXY — פרוקסי אופציונלי שכל תעבורת yt-dlp תעבור דרכו
@@ -25,6 +29,7 @@ set -u -o pipefail
 URL="${1:?שימוש: download.sh <url> [video|audio] [איכות]}"
 MODE="${2:-video}"          # video | audio
 QUALITY="${3:-1080}"        # מספר (1080, 720...) או max
+COVER_SHAPE="${4:-full}"    # full | square — צורת תמונת הקאבר באודיו
 OUTPUT_DIR="${OUTPUT_DIR:-downloads}"
 # פרוקסי אופציונלי — אם מוגדר, yt-dlp יעבוד דרכו (למשל WARP בתוך ה-runner)
 PROXY="${YTDLP_PROXY:-}"
@@ -52,6 +57,15 @@ LOG_FILE="$OUTPUT_DIR/download.log"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=download-lib.sh
 source "$SCRIPT_DIR/download-lib.sh"
+
+# אימות צורת הקאבר — ערך לא תקין לא מפיל את ההורדה, נופלים ל-full
+case "$COVER_SHAPE" in
+  full|square) ;;
+  *)
+    log "⚠ צורת קאבר לא תקינה: '$COVER_SHAPE' — משתמש ב-full (מלבן)"
+    COVER_SHAPE=full
+    ;;
+esac
 
 # -----------------------------------------------------------------------------
 # שכבת yt-dlp עם player_client — visionos,web ראשונים (ברירת המחדל, עוקפים SABR)

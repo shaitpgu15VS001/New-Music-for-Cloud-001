@@ -20,6 +20,10 @@ on:
         description: "איכות עבור הקישור הנוסף (מספר או max)"
         required: false
         default: ""
+      cover_shape:
+        description: "צורת קאבר לאודיו עבור הקישור הנוסף: full / square"
+        required: false
+        default: "full"
   schedule:
     - cron: "0 3 * * *"   # כל יום ב-03:00 UTC (05:00 שעון ישראל)
 
@@ -39,6 +43,7 @@ jobs:
           INPUT_URL: ${{ inputs.url }}
           INPUT_MODE: ${{ inputs.mode }}
           INPUT_QUALITY: ${{ inputs.quality }}
+          INPUT_COVER: ${{ inputs.cover_shape }}
         run: |
           python3 - <<'EOF'
           import json, os, re
@@ -46,7 +51,7 @@ jobs:
           entries = []
           seen = set()
 
-          def add(url, mode="", quality=""):
+          def add(url, mode="", quality="", cover=""):
               url = url.strip()
               if not url or url.startswith("#") or url in seen:
                   return
@@ -58,6 +63,8 @@ jobs:
                   "url": url,
                   "mode": mode or "video",
                   "quality": quality or "1080",
+                  # צורת קאבר: full = מלבן (ברירת מחדל), square = ריבוע שווה-מרכז
+                  "cover": cover or "full",
               })
 
           try:
@@ -66,13 +73,15 @@ jobs:
                   if parts:
                       add(parts[0],
                           parts[1] if len(parts) > 1 else "",
-                          parts[2] if len(parts) > 2 else "")
+                          parts[2] if len(parts) > 2 else "",
+                          parts[3] if len(parts) > 3 else "")
           except FileNotFoundError:
               pass
 
           add(os.environ.get("INPUT_URL", ""),
               os.environ.get("INPUT_MODE", ""),
-              os.environ.get("INPUT_QUALITY", ""))
+              os.environ.get("INPUT_QUALITY", ""),
+              os.environ.get("INPUT_COVER", ""))
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
               f.write(f"count={len(entries)}\n")
@@ -88,7 +97,7 @@ jobs:
             grep '^matrix=' "$GITHUB_OUTPUT" | cut -d= -f2- | python3 -c "
           import json, sys
           for e in json.loads(sys.stdin.read()):
-              print(e['url'], '|', e['mode'], '|', e['quality'])
+              print(e['url'], '|', e['mode'], '|', e['quality'], '|', e['cover'])
           " >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -204,16 +213,18 @@ jobs:
           MATRIX_URL: ${{ matrix.url }}
           MATRIX_MODE: ${{ matrix.mode }}
           MATRIX_QUALITY: ${{ matrix.quality }}
+          MATRIX_COVER: ${{ matrix.cover }}
         run: |
           chmod +x scripts/download.sh scripts/warp-rotate.sh
           url="$MATRIX_URL"
           mode="$MATRIX_MODE"
           quality="$MATRIX_QUALITY"
+          cover="${MATRIX_COVER:-full}"
 
           for attempt in 1 2 3; do
             # ניקוי הלוג לפני כל נסיון — ה-grep למטה בודק רק כשלון נוכחי
             rm -f downloads/download.log
-            if bash scripts/download.sh "$url" "$mode" "$quality"; then
+            if bash scripts/download.sh "$url" "$mode" "$quality" "$cover"; then
               exit 0
             fi
             if [ "$attempt" -lt 3 ] \

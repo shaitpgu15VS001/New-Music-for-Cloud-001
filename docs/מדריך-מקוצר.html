@@ -33,12 +33,16 @@
 <h2>הרצה מקומית</h2>
 <pre>./scripts/download.sh "https://www.youtube.com/shorts/GTgarjAw8b8" video 1080</pre>
 <pre>./scripts/download.sh "https://music.youtube.com/watch?v=XXXX" audio 320</pre>
-<p>הפרמטרים: קישור, מצב (<code>video</code> או <code>audio</code>), איכות (מספר או <code>max</code>).
+<pre>./scripts/download.sh "https://music.youtube.com/watch?v=XXXX" audio 320 square</pre>
+<p>הפרמטרים: קישור, מצב (<code>video</code> או <code>audio</code>), איכות (מספר או <code>max</code>),
+ופרמטר רביעי אופציונלי לצורת תמונת הקאבר: <code>full</code> (ברירת מחדל) או <code>square</code>.
 הקובץ נשמר בתיקיית <code>downloads/</code>.</p>
 
 <div class="tip">
 במצב <code>audio</code> הקובץ יורד עם <b>תמונת הקאבר של השיר מוטמעת בתוכו</b> —
 היא מופיעה בנגני מדיה ובטלפון בלי צורך בקובץ תמונה נפרד.
+לבחירת ריבוע שווה-מרכז במקום המלבן המלא — הוסיפו <code>square</code> כפרמטר רביעי
+(או עמודה רביעית <code>square</code> ברשימה).
 </div>
 
 <h2>הרצה מ-GitHub Actions</h2>
@@ -59,9 +63,10 @@ WARP, לולאת סיבוב IP עד 3 נסיונות, אימות סיומת ו-f
 <h3>כלי העבודה</h3>
 <ul>
   <li><b>קובץ הרשימה</b> — <code>downloads-list.txt</code> בשורש ה-repo. כל שורה =
-    קישור + מצב (<code>video</code>/<code>audio</code>) + איכות (מספר או <code>max</code>).
-    ברירות מחדל: <code>video</code> ו-<code>1080</code>. שורות ריקות ושורות שמתחילות ב-# מתעלמות</li>
-  <li><b>קלט ידני</b> — בעת הרצה ידנית ניתן להזין קישור נוסף (+מצב ואיכות) בשדות הקלט —
+    קישור + מצב (<code>video</code>/<code>audio</code>) + איכות (מספר או <code>max</code>)
+    + צורת קאבר אופציונלית (<code>full</code>/<code>square</code>, לאודיו בלבד).
+    ברירות מחדל: <code>video</code>, <code>1080</code> ו-<code>full</code>. שורות ריקות ושורות שמתחילות ב-# מתעלמות</li>
+  <li><b>קלט ידני</b> — בעת הרצה ידנית ניתן להזין קישור נוסף (+מצב, איכות וצורת קאבר) בשדות הקלט —
     הוא מתווסף לרשימה לאותה ריצה בלבד</li>
   <li><b>תזמון אוטומטי</b> — הריצה היומית בשעה 03:00 UTC (05:00 שעון ישראל) מעבדת את מה
     שנשאר ברשימה</li>
@@ -70,6 +75,7 @@ WARP, לולאת סיבוב IP עד 3 נסיונות, אימות סיומת ו-f
 <pre># דוגמה ל- downloads-list.txt
 https://www.youtube.com/watch?v=dQw4w9WgXcQ video 1080
 https://music.youtube.com/watch?v=XXXX audio 320
+https://www.youtube.com/watch?v=YYYY audio 320 square
 # https://www.youtube.com/watch?v=YYYY  &lt;- שורה זו מושבתת</pre>
 
 <div class="tip">

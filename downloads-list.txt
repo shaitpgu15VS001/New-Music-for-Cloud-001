@@ -1,12 +1,12 @@
 # רשימת הורדות של workflow "הורדת יוטיוב"
-# פורמט כל שורה: <קישור> [מצב: video|audio] [איכות: מספר|max]
-# ברירות מחדל: מצב video, איכות 1080.
+# פורמט כל שורה: <קישור> [מצב: video|audio] [איכות: מספר|max] [צורת קאבר: full|square]
+# ברירות מחדל: מצב video, איכות 1080, צורת קאבר full.
+# צורת הקאבר חלה על אודיו בלבד: full = התמונה המלאה (מלבן), 
+# square = ריבוע שווה-מרכז שמכיל את מרכז התמונה בלבד.
 # שורות ריקות ושורות שמתחילות ב-# מתעלמות.
 # מומלץ למחוק שורה אחרי שההורדה הושלמה — כדי שהריצה היומית לא תוריד שוב.
 #
 # דוגמאות (הסירו את ה-# כדי להפעיל):
 # https://www.youtube.com/watch?v=dQw4w9WgXcQ video 1080
 # https://music.youtube.com/watch?v=XXXXXXX audio 320
-https://www.youtube.com/watch?v=MCcoNr_GaiU video 1080
-https://music.youtube.com/watch?v=bNpTG31hVEM&si=nm4a3o0aXkRJs8hK audio 320
-https://www.youtube.com/watch?v=JnMOouVCwoI audio 320
+# https://www.youtube.com/watch?v=XXXXXXX audio 320 square
