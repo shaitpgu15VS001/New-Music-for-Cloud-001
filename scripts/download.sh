@@ -79,7 +79,10 @@ try_android_web() {
   python3 -m pip install --quiet --upgrade --disable-pip-version-check "yt-dlp" mutagen >>"$LOG_FILE" 2>&1 \
     || { log "התקנת yt-dlp נכשלה"; return 1; }
 
-  local out_pattern="$OUTPUT_DIR/%(title)s [%(id)s].%(ext)s"
+  # השם מכיל את הכותרת בלבד — מזהה הסרטון עבר משם הקובץ אל תוך תגית
+  # "הערות" (ראה את blok meta_args למטה). אימות היציאה מאתר לפי סיומת,
+  # לא לפי שם — לכן ההסרה לא שוברת את verify_output (אומת 2026-11-03).
+  local out_pattern="$OUTPUT_DIR/%(title)s.%(ext)s"
 
   # --- בניית פורמטים: סבב איכות מלאה + סבב התאמה --------------------------
   # הסיבה: הלקוחות android/web/web_embedded לפעמים מחזירים רק פורמט 18 (360p)
@@ -93,6 +96,12 @@ try_android_web() {
   #   אומת: FFmpegMetadata רוץ לפני EmbedThumbnail בסדר ה-post-processors,
   #   ו-9/9 מקרי קצה קשים (עברית, אימוג'י, 5000 תווים) עברו ללא שגיאה.
   local -a meta_args=(--embed-metadata)
+  # מזהה הסרטון: במקום שם הקובץ — בתגית "הערות", בצורה "מזהה | קישור למקור".
+  # --parse-metadata יוצר שדה-ביניים ששמו meta_comment; yt-dlp הופך כל שדה
+  # שמתחיל ב-meta_ לתגית מותאמת (FFmpegMetadataPP, ffmpeg.py 765-769).
+  # אומת בניסוי 2026-11-03: נרשם כ-TXXX ב-mp3, ©cmt ב-m4a/mp4, וב-mkv/webm.
+  # נבחרה "הערות" כי היא התגית היחידה ששרדה בכל הפורמטים (ניסוי F1-F3).
+  meta_args+=(--parse-metadata "%(id)s | %(webpage_url)s:(?P<meta_comment>.+)")
   if [ "$MODE" = "audio" ]; then
     # QUALITY מספרית וסבירה (עד 512) = ביטרעט mp3 מבוקש, אחרת m4a.
     # סבב א': אודיו נפרד (ba) בלבד — לא נשחק מסרט 360p.
