@@ -103,12 +103,8 @@ def sniff_content(path):
 
 
 def title_from_filename(path):
-    """כותרת מתוך שם הקובץ.
-
-    מאז 2026-11-03 שם הקובץ הוא כותרת בלבד (המזהה עבר לתגית ההערות),
-    ולכן הדפוס למטה לא תופס — מחזירים את השם כמו שהוא. הדפוס נשמר
-    לקבצים ישנים ששמרו על התבנית: 'שם שיר [מזהה-11-תווים].mp3'.
-    """
+    """כותרת מתוך שם הקובץ; מאז 2026-11-03 השם כותרת בלבד (המזהה עבר
+    לתגית "הערות") — הדפוס רלוונטי רק לקבצים ישנים: 'שיר [מזהה-11-תווים].mp3'."""
     name = path.stem.strip()
     m = re.match(r"^(.*) \[[A-Za-z0-9_-]{11}\]$", name)
     return (m.group(1) if m else name).strip()
@@ -183,6 +179,21 @@ def write_tags(path, fields):
         mp4.save()
 
 
+def fix_comment_for_windows(path):
+    """העתקת TXXX:comment ל-COMM (heb, UTF-16): אקספלורר וינדוז מציג mp3 רק דרך
+    frame COMM בשפת המערכת + UTF-16 (אומת 2026-11-03); m4a/mp4 לא נוגעים."""
+    if path.suffix.lower() != ".mp3": return
+    try:
+        from mutagen.id3 import ID3, COMM
+        tags = ID3(str(path))
+        src = tags.get("TXXX:comment")
+        if not src or not src.text or not src.text[0]: return  # אין מה להעתיק
+        # HashKey של COMM הוא lang:desc — כתיבה חוזרת מחליפה, לא מכפילה
+        tags.add(COMM(encoding=1, lang="heb", desc="", text=[_text(src.text[0])]))
+        tags.save(str(path), v2_version=4)
+    except Exception: return  # noqa: BLE001 — לא קטלני
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print("שימוש: enrich-metadata.py <קובץ-אודיו>", file=sys.stderr)
@@ -198,6 +209,9 @@ def main() -> int:
     if path.suffix.lower().lstrip(".") != kind:
         print(f"ENRICH — דולג: הסיומת {path.suffix} אך התוכן הוא {kind} — לא כותבים")
         return 0
+
+    # לפני ה-early returns: חל על כל mp3, גם כשאין התאמת iTunes
+    fix_comment_for_windows(path)
 
     title, artist = read_tags(path)
     if not title:
